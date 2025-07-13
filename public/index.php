@@ -1,8 +1,10 @@
 <?php
 // public/index.php
 
-// Start session
-session_start();
+// Start session hanya jika belum dimulai
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
 
 // Load configuration
 require_once '../config/config.php';
@@ -11,13 +13,13 @@ require_once '../config/database.php';
 // Load core files
 require_once '../app/core/Controller.php';
 
-// Simple routing
+// Simple routing - default ke auth/login
 $url = $_GET['url'] ?? 'auth/login';
 $url = rtrim($url, '/');
 $url = explode('/', $url);
 
-$controllerName = ucfirst($url[0] ?? 'auth') . 'Controller';
-$method = $url[1] ?? 'index';
+$controllerName = ucfirst($url[0] ?? 'Auth') . 'Controller';
+$method = $url[1] ?? 'login';
 $params = array_slice($url, 2);
 
 // Check if controller file exists

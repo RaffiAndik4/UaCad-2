@@ -1,5 +1,10 @@
 <?php
 class DashboardController extends Controller {
+    
+    public function __construct() {
+        // Session sudah dimulai di public/index.php, tidak perlu start lagi
+    }
+    
     public function index() {
         $this->checkAuth();
         
@@ -11,7 +16,8 @@ class DashboardController extends Controller {
                 $this->view('mahasiswa/dashboard', $data);
                 break;
             case 'organisasi':
-                $this->view('organisasi/dashboard', $data);
+                // Redirect ke OrganisasiController
+                $this->redirect('organisasi/dashboard');
                 break;
             case 'staff':
                 $this->view('staff/dashboard', $data);
@@ -21,4 +27,3 @@ class DashboardController extends Controller {
         }
     }
 }
-?>

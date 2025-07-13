@@ -1,7 +1,8 @@
-php<?php
+<?php
+// Generate organization initials
 $org_initials = '';
-if (isset($data['org_data']['nama_organisasi'])) {
-    $words = explode(' ', $data['org_data']['nama_organisasi']);
+if (isset($org_data['nama_organisasi'])) {
+    $words = explode(' ', $org_data['nama_organisasi']);
     foreach ($words as $word) {
         if (!empty($word)) {
             $org_initials .= strtoupper($word[0]);
@@ -13,13 +14,10 @@ if (empty($org_initials)) {
     $org_initials = 'ORG';
 }
 
-// Set default BASE_URL if not defined
-if (!defined('BASE_URL')) {
-    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
-    $host = $_SERVER['HTTP_HOST'];
-    $script_path = dirname($_SERVER['SCRIPT_NAME']);
-    define('BASE_URL', $protocol . $host . $script_path . '/');
-}
+// Set default values if data not available
+$stats = $stats ?? ['total_events' => 0, 'total_capacity' => 0, 'active_events' => 0];
+$active_events = $active_events ?? [];
+$org_data = $org_data ?? ['nama_organisasi' => 'Organisasi', 'username' => 'Admin', 'jenis_organisasi' => 'Organisasi'];
 ?>
 
 <!DOCTYPE html>
@@ -27,13 +25,12 @@ if (!defined('BASE_URL')) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?php echo $data['title'] ?? 'Dashboard'; ?> - UACAD</title>
+    <title>Dashboard Organisasi - UACAD</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     
     <style>
-        /* Include all CSS here untuk avoid file missing errors */
         * {
             margin: 0;
             padding: 0;
@@ -41,9 +38,9 @@ if (!defined('BASE_URL')) {
         }
 
         body {
-            background-color: #fafafa;
+            background-color: #f8fafc;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            color: #2d3748;
+            color: #1e293b;
             line-height: 1.6;
         }
         
@@ -53,16 +50,16 @@ if (!defined('BASE_URL')) {
             left: 0;
             height: 100vh;
             width: 260px;
-            background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 100%);
+            background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
             z-index: 1000;
             transition: all 0.3s ease;
-            box-shadow: 4px 0 20px rgba(245, 158, 11, 0.15);
+            box-shadow: 4px 0 20px rgba(102, 126, 234, 0.15);
         }
         
         .sidebar .logo {
             text-align: center;
             color: white;
-            font-size: 22px;
+            font-size: 24px;
             font-weight: 700;
             margin: 24px 0 40px 0;
             padding: 0 20px;
@@ -82,7 +79,7 @@ if (!defined('BASE_URL')) {
             font-size: 14px;
             border: none;
             background: none;
-            width: 100%;
+            width: calc(100% - 12px);
             text-align: left;
             cursor: pointer;
         }
@@ -94,9 +91,10 @@ if (!defined('BASE_URL')) {
         }
         
         .sidebar .nav-link.active {
-            background: rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.25);
             color: white;
             font-weight: 600;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         }
         
         .sidebar .nav-link i {
@@ -116,9 +114,9 @@ if (!defined('BASE_URL')) {
             background: white;
             padding: 24px 28px;
             border-radius: 16px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             margin-bottom: 28px;
-            border: 1px solid #f1f5f9;
+            border: 1px solid #e2e8f0;
         }
         
         .welcome-section {
@@ -147,32 +145,21 @@ if (!defined('BASE_URL')) {
         }
         
         .profile-img {
-            width: 44px;
-            height: 44px;
+            width: 48px;
+            height: 48px;
             border-radius: 12px;
-            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
             font-weight: 700;
-            font-size: 16px;
-        }
-        
-        .profile-name {
-            font-weight: 600;
-            color: #1e293b;
-            font-size: 14px;
-        }
-        
-        .profile-role {
-            color: #64748b;
-            font-size: 12px;
+            font-size: 18px;
         }
         
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 20px;
             margin-bottom: 32px;
         }
@@ -181,29 +168,47 @@ if (!defined('BASE_URL')) {
             background: white;
             padding: 24px;
             border-radius: 16px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-            border: 1px solid #f1f5f9;
-            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 1px solid #e2e8f0;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .stats-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
         }
         
         .stats-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            transform: translateY(-4px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+        
+        .stats-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
         }
         
         .stats-icon {
             width: 48px;
             height: 48px;
             border-radius: 12px;
-            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 16px;
         }
         
         .stats-icon i {
-            color: #d97706;
+            color: #7c3aed;
             font-size: 20px;
         }
         
@@ -222,7 +227,7 @@ if (!defined('BASE_URL')) {
         
         .content-grid {
             display: grid;
-            grid-template-columns: 1fr 400px;
+            grid-template-columns: 2fr 1fr;
             gap: 28px;
         }
         
@@ -230,8 +235,8 @@ if (!defined('BASE_URL')) {
             background: white;
             border-radius: 16px;
             padding: 24px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-            border: 1px solid #f1f5f9;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 1px solid #e2e8f0;
             margin-bottom: 24px;
         }
         
@@ -239,6 +244,8 @@ if (!defined('BASE_URL')) {
             display: flex;
             align-items: center;
             margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid #f1f5f9;
         }
         
         .chart-header h3 {
@@ -246,10 +253,12 @@ if (!defined('BASE_URL')) {
             font-weight: 600;
             color: #1e293b;
             margin: 0;
+            display: flex;
+            align-items: center;
         }
         
         .chart-header i {
-            color: #f59e0b;
+            color: #667eea;
             margin-right: 8px;
         }
         
@@ -258,63 +267,17 @@ if (!defined('BASE_URL')) {
             width: 100% !important;
         }
         
-        .shortcut-section {
-            background: white;
-            border-radius: 16px;
-            padding: 24px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-            border: 1px solid #f1f5f9;
-            text-align: center;
-        }
-        
-        .shortcut-section h3 {
-            font-size: 18px;
-            font-weight: 600;
-            color: #1e293b;
-            margin-bottom: 20px;
-        }
-        
-        .shortcut-buttons {
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-        
-        .shortcut-btn {
-            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-            border: none;
-            border-radius: 12px;
-            color: white;
-            padding: 12px 20px;
-            font-weight: 600;
-            font-size: 14px;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            transition: all 0.2s ease;
-            box-shadow: 0 2px 4px rgba(245, 158, 11, 0.2);
-            cursor: pointer;
-        }
-        
-        .shortcut-btn:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
-            color: white;
-        }
-        
         .events-panel {
             background: white;
             border-radius: 16px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-            border: 1px solid #f1f5f9;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 1px solid #e2e8f0;
             height: fit-content;
         }
         
         .events-header {
             padding: 24px 24px 16px 24px;
-            border-bottom: 1px solid #f1f5f9;
+            border-bottom: 2px solid #f1f5f9;
         }
         
         .events-header h3 {
@@ -322,6 +285,8 @@ if (!defined('BASE_URL')) {
             font-weight: 600;
             color: #1e293b;
             margin: 0;
+            display: flex;
+            align-items: center;
         }
         
         .events-list {
@@ -338,28 +303,16 @@ if (!defined('BASE_URL')) {
         
         .empty-state i {
             font-size: 48px;
-            color: #d1d5db;
+            color: #cbd5e1;
             margin-bottom: 16px;
         }
         
-        .empty-state h4 {
-            font-size: 18px;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #374151;
-        }
-        
-        .empty-state p {
-            font-size: 14px;
-            margin-bottom: 20px;
-        }
-        
         .btn-create-first {
-            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             border: none;
             border-radius: 8px;
             color: white;
-            padding: 10px 20px;
+            padding: 12px 20px;
             font-weight: 600;
             font-size: 14px;
             text-decoration: none;
@@ -370,125 +323,51 @@ if (!defined('BASE_URL')) {
             cursor: pointer;
         }
         
-        .btn-create-first:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
-            color: white;
-        }
-        
         .event-item {
             padding: 20px;
             border-radius: 12px;
-            border: 1px solid #f1f5f9;
+            border: 1px solid #e2e8f0;
             margin-bottom: 12px;
             transition: all 0.2s ease;
-            background: #fafafa;
-        }
-        
-        .event-item:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
             background: white;
         }
         
-        .event-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 12px;
+        .event-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-color: #667eea;
         }
         
-        .event-date {
-            background: #f59e0b;
-            color: white;
-            padding: 6px 12px;
-            border-radius: 8px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-        
-        .event-status {
-            padding: 4px 10px;
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
-        .status-aktif {
-            background: #dcfce7;
-            color: #166534;
-        }
-        
-        .status-draft {
-            background: #fef3c7;
-            color: #92400e;
-        }
-        
-        .status-selesai {
-            background: #e5e7eb;
-            color: #374151;
-        }
-        
-        .event-title {
-            font-size: 16px;
-            font-weight: 600;
-            color: #1e293b;
-            margin-bottom: 8px;
-        }
-        
-        .event-description {
-            color: #64748b;
-            font-size: 13px;
-            margin-bottom: 12px;
-            line-height: 1.5;
-        }
-        
-        .session-info {
-            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-            border: 1px solid #fbbf24;
-            border-radius: 12px;
-            padding: 16px;
+        .shortcut-section {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            border: 1px solid #e2e8f0;
             margin-bottom: 24px;
         }
         
-        .session-info h4 {
-            color: #92400e;
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 8px;
+        .shortcut-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
         }
         
-        .session-info p {
-            color: #a16207;
+        .shortcut-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            padding: 16px 20px;
+            font-weight: 600;
             font-size: 14px;
-            margin: 0;
-        }
-        
-        .modal-header {
-            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-            border-bottom: 1px solid #fbbf24;
-        }
-        
-        .modal-title {
-            color: #92400e;
-            font-weight: 600;
-        }
-        
-        .status-option {
-            cursor: pointer;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
             transition: all 0.2s ease;
-        }
-        
-        .status-option:hover {
-            border-color: #fbbf24 !important;
-            background-color: #fef3c7;
-        }
-        
-        .status-option.selected {
-            border-color: #f59e0b !important;
-            background-color: #fef3c7;
+            cursor: pointer;
         }
         
         /* Responsive */
@@ -511,8 +390,10 @@ if (!defined('BASE_URL')) {
                 grid-template-columns: repeat(2, 1fr);
             }
             
-            .shortcut-buttons {
+            .welcome-section {
                 flex-direction: column;
+                align-items: flex-start;
+                gap: 16px;
             }
         }
     </style>
@@ -521,37 +402,28 @@ if (!defined('BASE_URL')) {
     <!-- Sidebar -->
     <div class="sidebar">
         <div class="logo">
-            <i class="fas fa-calendar-alt"></i> UACAD
+            <i class="fas fa-university"></i> UACAD
         </div>
         <nav class="nav flex-column">
-            <a href="dashboard.php" class="nav-link active">
+            <a href="<?= BASE_URL ?>organisasi/dashboard" class="nav-link active">
                 <i class="fas fa-home"></i> Dashboard
             </a>
-            <a href="events.php" class="nav-link">
+            <a href="<?= BASE_URL ?>organisasi/events" class="nav-link">
                 <i class="fas fa-calendar-check"></i> Event Saya
             </a>
-            <button type="button" class="nav-link" data-bs-toggle="modal" data-bs-target="#createEventModal">
+            <a href="<?= BASE_URL ?>organisasi/createEvent" class="nav-link">
                 <i class="fas fa-plus-circle"></i> Buat Event
-            </button>
-            <a href="participants.php" class="nav-link">
+            </a>
+            <a href="<?= BASE_URL ?>organisasi/participants" class="nav-link">
                 <i class="fas fa-users"></i> Kelola Pendaftar
             </a>
-            <a href="analytics.php" class="nav-link">
+            <a href="<?= BASE_URL ?>organisasi/analytics" class="nav-link">
                 <i class="fas fa-chart-line"></i> Analitik
             </a>
-            <a href="schedule.php" class="nav-link">
-                <i class="fas fa-calendar-times"></i> Konflik Jadwal
-            </a>
-            <a href="reports.php" class="nav-link">
-                <i class="fas fa-file-alt"></i> Laporan
-            </a>
-            <a href="profile.php" class="nav-link">
+            <a href="<?= BASE_URL ?>organisasi/profile" class="nav-link">
                 <i class="fas fa-building"></i> Profil Organisasi
             </a>
-            <a href="settings.php" class="nav-link">
-                <i class="fas fa-cog"></i> Pengaturan
-            </a>
-            <a href="logout.php" class="nav-link">
+            <a href="<?= BASE_URL ?>auth/logout" class="nav-link">
                 <i class="fas fa-sign-out-alt"></i> Logout
             </a>
         </nav>
@@ -559,40 +431,18 @@ if (!defined('BASE_URL')) {
 
     <!-- Main Content -->
     <div class="main-content">
-        <!-- Error Display -->
-        <?php if (isset($data['error'])): ?>
-            <div class="alert alert-danger">
-                <strong>Error:</strong> <?php echo htmlspecialchars($data['error']); ?>
-            </div>
-        <?php endif; ?>
-
-        <!-- Session Info -->
-        <div class="session-info">
-            <h4><i class="fas fa-info-circle"></i> Session Organisasi</h4>
-            <p>
-                Login sebagai: <strong><?php echo htmlspecialchars($data['org_data']['nama_organisasi'] ?? 'Organisasi'); ?></strong> | 
-                ID: <strong><?php echo htmlspecialchars($data['org_data']['id'] ?? 'N/A'); ?></strong> | 
-                Status: <strong><?php echo htmlspecialchars(ucfirst($data['org_data']['status_verifikasi'] ?? 'pending')); ?></strong> |
-                Jenis: <strong><?php echo htmlspecialchars($data['org_data']['jenis_organisasi'] ?? 'N/A'); ?></strong>
-            </p>
-        </div>
-
         <!-- Header -->
         <div class="header">
             <div class="welcome-section">
                 <div class="welcome-text">
-                    <h1>Dashboard <?php echo htmlspecialchars($data['org_data']['nama_organisasi'] ?? 'Organisasi'); ?></h1>
+                    <h1>Dashboard <?= htmlspecialchars($org_data['nama_organisasi']) ?></h1>
                     <p>Kelola event dan kegiatan organisasi Anda dengan mudah</p>
                 </div>
                 <div class="profile-section">
-                    <div class="profile-img"><?php echo $org_initials; ?></div>
+                    <div class="profile-img"><?= $org_initials ?></div>
                     <div>
-                        <div class="profile-name">
-                            <?php echo htmlspecialchars($data['org_data']['username'] ?? 'Admin'); ?>
-                        </div>
-                        <div class="profile-role">
-                            <?php echo htmlspecialchars($data['org_data']['jenis_organisasi'] ?? 'Organisasi'); ?>
-                        </div>
+                        <div class="profile-name"><?= htmlspecialchars($org_data['username']) ?></div>
+                        <div class="profile-role"><?= htmlspecialchars($org_data['jenis_organisasi']) ?></div>
                     </div>
                 </div>
             </div>
@@ -601,32 +451,48 @@ if (!defined('BASE_URL')) {
         <!-- Stats Cards -->
         <div class="stats-grid">
             <div class="stats-card">
-                <div class="stats-icon">
-                    <i class="fas fa-calendar-plus"></i>
+                <div class="stats-header">
+                    <div>
+                        <div class="stats-value"><?= $stats['total_events'] ?></div>
+                        <div class="stats-label">Total Event Dibuat</div>
+                    </div>
+                    <div class="stats-icon">
+                        <i class="fas fa-calendar-plus"></i>
+                    </div>
                 </div>
-                <div class="stats-value"><?php echo $data['stats']['total_events'] ?? 0; ?></div>
-                <div class="stats-label">Total Event Dibuat</div>
             </div>
             <div class="stats-card">
-                <div class="stats-icon">
-                    <i class="fas fa-user-check"></i>
+                <div class="stats-header">
+                    <div>
+                        <div class="stats-value"><?= $stats['total_capacity'] ?></div>
+                        <div class="stats-label">Total Kapasitas</div>
+                    </div>
+                    <div class="stats-icon">
+                        <i class="fas fa-user-check"></i>
+                    </div>
                 </div>
-                <div class="stats-value"><?php echo $data['stats']['total_capacity'] ?? 0; ?></div>
-                <div class="stats-label">Total Kapasitas</div>
             </div>
             <div class="stats-card">
-                <div class="stats-icon">
-                    <i class="fas fa-clock"></i>
+                <div class="stats-header">
+                    <div>
+                        <div class="stats-value"><?= $stats['active_events'] ?></div>
+                        <div class="stats-label">Event Aktif</div>
+                    </div>
+                    <div class="stats-icon">
+                        <i class="fas fa-clock"></i>
+                    </div>
                 </div>
-                <div class="stats-value"><?php echo $data['stats']['active_events'] ?? 0; ?></div>
-                <div class="stats-label">Event Aktif</div>
             </div>
             <div class="stats-card">
-                <div class="stats-icon">
-                    <i class="fas fa-star"></i>
+                <div class="stats-header">
+                    <div>
+                        <div class="stats-value">4.8</div>
+                        <div class="stats-label">Rating Organisasi</div>
+                    </div>
+                    <div class="stats-icon">
+                        <i class="fas fa-star"></i>
+                    </div>
                 </div>
-                <div class="stats-value">-</div>
-                <div class="stats-label">Rating Organisasi</div>
             </div>
         </div>
 
@@ -638,15 +504,13 @@ if (!defined('BASE_URL')) {
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
                     <div class="chart-container">
                         <div class="chart-header">
-                            <i class="fas fa-trending-up"></i>
-                            <h3>Trend Event (6 Bulan)</h3>
+                            <h3><i class="fas fa-trending-up"></i> Trend Event (6 Bulan)</h3>
                         </div>
                         <canvas id="trendChart" class="chart-canvas"></canvas>
                     </div>
                     <div class="chart-container">
                         <div class="chart-header">
-                            <i class="fas fa-chart-pie"></i>
-                            <h3>Kategori Event</h3>
+                            <h3><i class="fas fa-chart-pie"></i> Kategori Event</h3>
                         </div>
                         <canvas id="categoryChart" class="chart-canvas"></canvas>
                     </div>
@@ -659,11 +523,14 @@ if (!defined('BASE_URL')) {
                         <button type="button" class="shortcut-btn" data-bs-toggle="modal" data-bs-target="#createEventModal">
                             <i class="fas fa-plus"></i> Buat Event Baru
                         </button>
-                        <a href="duplicate-event.php" class="shortcut-btn">
-                            <i class="fas fa-copy"></i> Duplikat Event
+                        <a href="<?= BASE_URL ?>organisasi/events" class="shortcut-btn">
+                            <i class="fas fa-calendar-check"></i> Lihat Semua Event
                         </a>
-                        <a href="schedule.php" class="shortcut-btn">
-                            <i class="fas fa-calendar-check"></i> Cek Jadwal
+                        <a href="<?= BASE_URL ?>organisasi/analytics" class="shortcut-btn">
+                            <i class="fas fa-chart-line"></i> Analitik
+                        </a>
+                        <a href="<?= BASE_URL ?>organisasi/profile" class="shortcut-btn">
+                            <i class="fas fa-building"></i> Edit Profil
                         </a>
                     </div>
                 </div>
@@ -672,10 +539,10 @@ if (!defined('BASE_URL')) {
             <!-- Right Column - Events -->
             <div class="events-panel">
                 <div class="events-header">
-                    <h3><i class="fas fa-fire" style="color: #f59e0b; margin-right: 8px;"></i>Event Aktif</h3>
+                    <h3><i class="fas fa-fire" style="color: #667eea; margin-right: 8px;"></i>Event Aktif</h3>
                 </div>
                 <div class="events-list">
-                    <?php if (empty($data['active_events'])): ?>
+                    <?php if (empty($active_events)): ?>
                         <!-- Empty State -->
                         <div class="empty-state">
                             <i class="fas fa-calendar-alt"></i>
@@ -686,25 +553,34 @@ if (!defined('BASE_URL')) {
                             </button>
                         </div>
                     <?php else: ?>
-                        <?php foreach ($data['active_events'] as $event): ?>
+                        <?php foreach ($active_events as $event): ?>
                         <div class="event-item">
                             <div class="event-header">
                                 <div class="event-date">
-                                    <?php echo date('d M Y', strtotime($event['tanggal_mulai'] ?? $event['created_at'])); ?>
+                                    <?= date('d M Y', strtotime($event['tanggal_mulai'] ?? $event['created_at'])) ?>
                                 </div>
-                                <span class="event-status status-<?php echo $event['status']; ?>">
-                                    <?php echo ucfirst($event['status']); ?>
+                                <span class="event-status status-<?= $event['status'] ?>">
+                                    <?= ucfirst($event['status']) ?>
                                 </span>
                             </div>
-                            <div class="event-title"><?php echo htmlspecialchars($event['nama_event']); ?></div>
-                            <div class="event-description">
-                                <?php echo htmlspecialchars(substr($event['deskripsi'] ?? '', 0, 100)) . (strlen($event['deskripsi'] ?? '') > 100 ? '...' : ''); ?>
-                            </div>
-                            <?php if (isset($event['kapasitas'])): ?>
-                            <div style="color: #64748b; font-size: 13px; margin-bottom: 12px;">
-                                <i class="fas fa-users"></i> Kapasitas: <?php echo $event['kapasitas']; ?> peserta
+                            
+                            <?php if (!empty($event['poster'])): ?>
+                            <div class="event-poster mb-2">
+                                <img src="<?= BASE_URL ?>uploads/posters/<?= $event['poster'] ?>" 
+                                     alt="Poster"
+                                     style="width: 100%; height: 100px; object-fit: cover; border-radius: 8px;"
+                                     onerror="this.style.display='none'">
                             </div>
                             <?php endif; ?>
+                            
+                            <div class="event-title"><?= htmlspecialchars($event['nama_event']) ?></div>
+                            <div class="event-description">
+                                <?= htmlspecialchars(substr($event['deskripsi'] ?? '', 0, 80)) ?>...
+                            </div>
+                            <div class="event-meta">
+                                <span><i class="fas fa-users"></i> <?= $event['kapasitas'] ?> peserta</span>
+                                <span><i class="fas fa-map-marker-alt"></i> <?= htmlspecialchars($event['lokasi']) ?></span>
+                            </div>
                         </div>
                         <?php endforeach; ?>
                     <?php endif; ?>
@@ -717,16 +593,15 @@ if (!defined('BASE_URL')) {
     <div class="modal fade" id="createEventModal" tabindex="-1" aria-labelledby="createEventModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <div class="modal-header">
+                <div class="modal-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
                     <h5 class="modal-title">
-                        <i class="fas fa-plus-circle text-warning"></i> Buat Event Baru
+                        <i class="fas fa-plus-circle"></i> Buat Event Baru
                     </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" style="filter: invert(1);"></button>
                 </div>
 
-                <form id="createEventForm">
+                <form id="createEventForm" enctype="multipart/form-data">
                     <div class="modal-body">
-                        <!-- Alert container -->
                         <div id="alertContainer"></div>
                         
                         <!-- Event Basic Info -->
@@ -741,7 +616,7 @@ if (!defined('BASE_URL')) {
                         </div>
                         
                         <div class="row mb-3">
-                            <div class="col-12">
+                            <div class="col-md-6">
                                 <label for="kategori" class="form-label fw-bold">
                                     Kategori <span class="text-danger">*</span>
                                 </label>
@@ -757,6 +632,13 @@ if (!defined('BASE_URL')) {
                                     <option value="lainnya">Lainnya</option>
                                 </select>
                             </div>
+                            <div class="col-md-6">
+                                <label for="kapasitas" class="form-label fw-bold">
+                                    Kapasitas <span class="text-danger">*</span>
+                                </label>
+                                <input type="number" class="form-control" id="kapasitas" name="kapasitas" 
+                                       min="1" max="10000" placeholder="100" required>
+                            </div>
                         </div>
                         
                         <div class="row mb-3">
@@ -764,9 +646,6 @@ if (!defined('BASE_URL')) {
                                 <label for="deskripsi" class="form-label fw-bold">Deskripsi</label>
                                 <textarea class="form-control" id="deskripsi" name="deskripsi" rows="3" 
                                           placeholder="Jelaskan detail event..."></textarea>
-                                <div class="form-text text-end">
-                                    <span id="charCount">0</span>/500 karakter
-                                </div>
                             </div>
                         </div>
                         
@@ -784,21 +663,27 @@ if (!defined('BASE_URL')) {
                             </div>
                         </div>
                         
-                        <!-- Location & Capacity -->
+                        <!-- Location -->
                         <div class="row mb-3">
-                            <div class="col-md-8">
+                            <div class="col-12">
                                 <label for="lokasi" class="form-label fw-bold">
                                     Lokasi <span class="text-danger">*</span>
                                 </label>
                                 <input type="text" class="form-control" id="lokasi" name="lokasi" 
                                        placeholder="Contoh: Aula Universitas" required>
                             </div>
-                            <div class="col-md-4">
-                                <label for="kapasitas" class="form-label fw-bold">
-                                    Kapasitas <span class="text-danger">*</span>
-                                </label>
-                                <input type="number" class="form-control" id="kapasitas" name="kapasitas" 
-                                       min="1" max="10000" placeholder="100" required>
+                        </div>
+
+                        <!-- Upload Poster - SIMPLE VERSION -->
+                        <div class="row mb-3">
+                            <div class="col-12">
+                                <label for="poster_event" class="form-label fw-bold">Upload Poster Event</label>
+                                <input type="file" class="form-control" id="poster_event" name="poster_event" 
+                                       accept=".jpg,.jpeg,.png,.pdf">
+                                <div class="form-text">
+                                    <i class="fas fa-info-circle text-primary"></i> 
+                                    Format: JPG, PNG, PDF (Max: 5MB) - Opsional
+                                </div>
                             </div>
                         </div>
                         
@@ -808,25 +693,21 @@ if (!defined('BASE_URL')) {
                                 <label class="form-label fw-bold">Status Event</label>
                                 <div class="row">
                                     <div class="col-md-6">
-                                        <div class="status-option p-3 border rounded selected" data-status="draft">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="radio" name="status" id="status_draft" value="draft" checked>
-                                                <label class="form-check-label fw-bold" for="status_draft">
-                                                    <i class="fas fa-edit text-secondary"></i> Draft
-                                                </label>
-                                            </div>
-                                            <small class="text-muted">Belum dipublikasi</small>
+                                        <div class="form-check p-3 border rounded">
+                                            <input class="form-check-input" type="radio" name="status" id="status_draft" value="draft" checked>
+                                            <label class="form-check-label fw-bold" for="status_draft">
+                                                <i class="fas fa-edit text-secondary"></i> Draft
+                                            </label>
+                                            <br><small class="text-muted">Belum dipublikasi</small>
                                         </div>
                                     </div>
                                     <div class="col-md-6">
-                                        <div class="status-option p-3 border rounded" data-status="aktif">
-                                            <div class="form-check">
-                                                <input class="form-check-input" type="radio" name="status" id="status_aktif" value="aktif">
-                                                <label class="form-check-label fw-bold" for="status_aktif">
-                                                    <i class="fas fa-play text-success"></i> Aktif
-                                                </label>
-                                            </div>
-                                            <small class="text-muted">Siap menerima pendaftaran</small>
+                                        <div class="form-check p-3 border rounded">
+                                            <input class="form-check-input" type="radio" name="status" id="status_aktif" value="aktif">
+                                            <label class="form-check-label fw-bold" for="status_aktif">
+                                                <i class="fas fa-play text-success"></i> Aktif
+                                            </label>
+                                            <br><small class="text-muted">Siap menerima pendaftaran</small>
                                         </div>
                                     </div>
                                 </div>
@@ -838,7 +719,7 @@ if (!defined('BASE_URL')) {
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                             <i class="fas fa-times"></i> Batal
                         </button>
-                        <button type="submit" class="btn btn-warning">
+                        <button type="submit" class="btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
                             <i class="fas fa-save"></i> Simpan Event
                         </button>
                     </div>
@@ -854,13 +735,10 @@ if (!defined('BASE_URL')) {
         Chart.defaults.font.size = 12;
         Chart.defaults.color = '#64748b';
 
-        // Initialize with PHP data
+        // Sample data untuk demo - dalam implementasi nyata, ambil dari PHP
         const dashboardData = {
-            orgData: <?php echo json_encode($data['org_data'] ?? []); ?>,
-            stats: <?php echo json_encode($data['stats'] ?? []); ?>,
-            trendData: <?php echo json_encode($data['trend_data'] ?? []); ?>,
-            categoryData: <?php echo json_encode($data['category_data'] ?? []); ?>,
-            activeEvents: <?php echo json_encode($data['active_events'] ?? []); ?>
+            trendData: <?= json_encode($trend_data ?? []) ?>,
+            categoryData: <?= json_encode($category_data ?? []) ?>
         };
 
         // Trend Chart
@@ -889,59 +767,41 @@ if (!defined('BASE_URL')) {
                 datasets: [{
                     label: 'Event Dibuat',
                     data: trendValues,
-                    borderColor: '#f59e0b',
-                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
                     borderWidth: 3,
                     fill: true,
                     tension: 0.4,
-                    pointBackgroundColor: '#f59e0b',
+                    pointBackgroundColor: '#667eea',
                     pointBorderColor: '#ffffff',
                     pointBorderWidth: 2,
-                    pointRadius: 5,
-                    pointHoverRadius: 7
+                    pointRadius: 6,
+                    pointHoverRadius: 8
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                interaction: {
-                    intersect: false,
-                    mode: 'index'
-                },
                 plugins: {
-                    legend: {
-                        display: false
-                    },
+                    legend: { display: false },
                     tooltip: {
-                        backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                        backgroundColor: 'rgba(30, 41, 59, 0.95)',
                         titleColor: '#ffffff',
                         bodyColor: '#ffffff',
-                        borderColor: '#f59e0b',
+                        borderColor: '#667eea',
                         borderWidth: 1,
-                        cornerRadius: 8,
-                        displayColors: false
+                        cornerRadius: 12
                     }
                 },
                 scales: {
                     y: {
                         beginAtZero: true,
-                        max: Math.max(...trendValues) + 2 || 10,
-                        ticks: {
-                            stepSize: 1,
-                            color: '#94a3b8'
-                        },
-                        grid: {
-                            color: 'rgba(148, 163, 184, 0.1)',
-                            borderColor: 'rgba(148, 163, 184, 0.2)'
-                        }
+                        ticks: { stepSize: 1, color: '#94a3b8' },
+                        grid: { color: 'rgba(148, 163, 184, 0.1)' }
                     },
                     x: {
-                        ticks: {
-                            color: '#94a3b8'
-                        },
-                        grid: {
-                            display: false
-                        }
+                        ticks: { color: '#94a3b8' },
+                        grid: { display: false }
                     }
                 }
             }
@@ -952,9 +812,9 @@ if (!defined('BASE_URL')) {
         let categoryLabels, categoryValues, categoryColors;
         
         if (dashboardData.categoryData.length > 0) {
-            categoryLabels = dashboardData.categoryData.map(item => item.kategori || 'Tanpa Kategori');
+            categoryLabels = dashboardData.categoryData.map(item => item.kategori);
             categoryValues = dashboardData.categoryData.map(item => item.count);
-            categoryColors = ['#f59e0b', '#fbbf24', '#fcd34d', '#fde68a', '#fef3c7'];
+            categoryColors = ['#667eea', '#764ba2', '#f093fb', '#f5576c', '#4facfe'];
         } else {
             categoryLabels = ['Belum Ada Data'];
             categoryValues = [1];
@@ -969,42 +829,25 @@ if (!defined('BASE_URL')) {
                     data: categoryValues,
                     backgroundColor: categoryColors,
                     borderWidth: 0,
-                    hoverOffset: 8
+                    hoverOffset: 10
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                cutout: '60%',
+                cutout: '65%',
                 plugins: {
                     legend: {
                         position: 'bottom',
-                        labels: {
-                            padding: 20,
-                            usePointStyle: true,
-                            font: {
-                                size: 12,
-                                weight: '500'
-                            },
-                            color: '#64748b'
-                        }
+                        labels: { padding: 20, usePointStyle: true, font: { size: 13 } }
                     },
                     tooltip: {
-                        backgroundColor: 'rgba(30, 41, 59, 0.9)',
+                        backgroundColor: 'rgba(30, 41, 59, 0.95)',
                         titleColor: '#ffffff',
                         bodyColor: '#ffffff',
-                        borderColor: '#f59e0b',
+                        borderColor: '#667eea',
                         borderWidth: 1,
-                        cornerRadius: 8,
-                        enabled: dashboardData.categoryData.length > 0,
-                        callbacks: {
-                            label: function(context) {
-                                if (dashboardData.categoryData.length === 0) return '';
-                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                const percentage = Math.round((context.parsed / total) * 100);
-                                return context.label + ': ' + context.parsed + ' (' + percentage + '%)';
-                            }
-                        }
+                        cornerRadius: 12
                     }
                 }
             }
@@ -1015,139 +858,74 @@ if (!defined('BASE_URL')) {
             const form = document.getElementById('createEventForm');
             const alertContainer = document.getElementById('alertContainer');
             
-            // Character counter
-            const deskripsiField = document.getElementById('deskripsi');
-            const charCount = document.getElementById('charCount');
-            
-            deskripsiField.addEventListener('input', function() {
-                const currentLength = this.value.length;
-                charCount.textContent = currentLength;
-                
-                if (currentLength > 450) {
-                    charCount.style.color = '#dc2626';
-                } else {
-                    charCount.style.color = '#6b7280';
-                }
-            });
-            
-            // Set minimum date
+            // Set minimum date to today
             const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            const currentDateTime = `${year}-${month}-${day}T${hours}:${minutes}`;
-            
+            const currentDateTime = now.toISOString().slice(0, 16);
             document.getElementById('tanggal_mulai').min = currentDateTime;
             document.getElementById('tanggal_selesai').min = currentDateTime;
-            
-            // Status selection
-            document.querySelectorAll('.status-option').forEach(option => {
-                option.addEventListener('click', function() {
-                    document.querySelectorAll('.status-option').forEach(opt => {
-                        opt.classList.remove('selected');
-                    });
-                    
-                    this.classList.add('selected');
-                    const radio = this.querySelector('input[type="radio"]');
-                    radio.checked = true;
-                });
-            });
             
             // Auto-update end date minimum when start date changes
             document.getElementById('tanggal_mulai').addEventListener('change', function() {
                 document.getElementById('tanggal_selesai').min = this.value;
             });
             
-            // Form submission
+            // Form submission - SIMPLE VERSION
             form.addEventListener('submit', function(e) {
                 e.preventDefault();
                 
                 const submitBtn = form.querySelector('button[type="submit"]');
                 const originalText = submitBtn.innerHTML;
                 
-                // Show loading state
+                // Show loading
                 submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
                 submitBtn.disabled = true;
-                
-                // Clear previous alerts
                 alertContainer.innerHTML = '';
                 
-                // Prepare form data
+                // Create FormData for file upload
                 const formData = new FormData(form);
                 
-                // Send AJAX request
-                fetch('dashboard.php', {
+                // Send to server
+                fetch('<?= BASE_URL ?>organisasi/dashboard', {
                     method: 'POST',
                     body: formData
                 })
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
-                        // Show success message
                         alertContainer.innerHTML = `
-                            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            <div class="alert alert-success">
                                 <i class="fas fa-check-circle"></i> ${data.message}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                             </div>
                         `;
-                        
-                        // Reset form
                         form.reset();
-                        document.querySelectorAll('.status-option').forEach(opt => {
-                            opt.classList.remove('selected');
-                        });
-                        document.querySelector('.status-option[data-status="draft"]').classList.add('selected');
-                        charCount.textContent = '0';
-                        
-                        // Close modal after 2 seconds and refresh page
                         setTimeout(() => {
                             const modal = bootstrap.Modal.getInstance(document.getElementById('createEventModal'));
                             modal.hide();
-                            window.location.reload();
-                        }, 2000);
-                        
+                            location.reload(); // Refresh to show new event
+                        }, 1500);
                     } else {
-                        // Show error message
                         alertContainer.innerHTML = `
-                            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <div class="alert alert-danger">
                                 <i class="fas fa-exclamation-triangle"></i> ${data.message}
-                                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                             </div>
                         `;
                     }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
                     alertContainer.innerHTML = `
-                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                            <i class="fas fa-exclamation-triangle"></i> Terjadi kesalahan sistem. Silakan coba lagi.
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-triangle"></i> Terjadi kesalahan sistem!
                         </div>
                     `;
                 })
                 .finally(() => {
-                    // Restore button state
                     submitBtn.innerHTML = originalText;
                     submitBtn.disabled = false;
                 });
             });
         });
 
-        // Sidebar navigation
-        document.querySelectorAll('.nav-link').forEach(link => {
-            link.addEventListener('click', function(e) {
-                if (this.tagName.toLowerCase() === 'button') return;
-                
-                document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-                this.classList.add('active');
-            });
-        });
-
         console.log('Dashboard loaded successfully!');
-        console.log('Organization data:', dashboardData.orgData);
-        console.log('Stats:', dashboardData.stats);
     </script>
 </body>
 </html>

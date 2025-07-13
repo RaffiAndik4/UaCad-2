@@ -2,10 +2,10 @@
 
 RewriteEngine On
 
-# Redirect semua request ke folder public/
+# Redirect root ke public/index.php (akan trigger default route auth/login)
+RewriteRule ^$ public/index.php [L]
+
+# Redirect semua request lainnya ke folder public/
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^(.*)$ public/$1 [L,QSA]
-
-# Redirect khusus untuk root ke public/ (akan trigger default route auth/login)
-RewriteRule ^$ public/index.php [L]

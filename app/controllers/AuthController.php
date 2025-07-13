@@ -6,6 +6,7 @@ class AuthController extends Controller {
     private $userModel;
     
     public function __construct() {
+        // Session sudah dimulai di public/index.php
         $this->userModel = $this->model('User');
     }
     
@@ -55,13 +56,20 @@ class AuthController extends Controller {
                         
                         error_log("Login successful for user: " . $result['username']);
                         
-                        // Create a simple dashboard for now
-                        echo "<!DOCTYPE html><html><head><title>Dashboard</title></head><body>";
-                        echo "<h1>Login Berhasil!</h1>";
-                        echo "<p>Selamat datang, " . $_SESSION['full_name'] . "</p>";
-                        echo "<p>Role: " . $_SESSION['role'] . "</p>";
-                        echo "<a href='" . BASE_URL . "auth/logout'>Logout</a>";
-                        echo "</body></html>";
+                        // Redirect based on role
+                        switch ($role) {
+                            case 'organisasi':
+                                $this->redirect('organisasi/dashboard');
+                                break;
+                            case 'mahasiswa':
+                                $this->redirect('mahasiswa/dashboard');
+                                break;
+                            case 'staff':
+                                $this->redirect('staff/dashboard');
+                                break;
+                            default:
+                                $this->redirect('dashboard');
+                        }
                         return;
                         
                     } else {
@@ -227,4 +235,3 @@ class AuthController extends Controller {
         echo json_encode(['available' => $result]);
     }
 }
-?>
