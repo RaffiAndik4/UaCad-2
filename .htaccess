@@ -1,0 +1,11 @@
+# File .htaccess di root folder uacad_final/
+
+RewriteEngine On
+
+# Redirect semua request ke folder public/
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ public/$1 [L,QSA]
+
+# Redirect khusus untuk root ke public/ (akan trigger default route auth/login)
+RewriteRule ^$ public/index.php [L]

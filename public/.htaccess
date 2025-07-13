@@ -1,0 +1,10 @@
+# File .htaccess di folder public/
+
+RewriteEngine On
+
+# Redirect semua request ke index.php dengan parameter url
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php?url=$1 [QSA,L]
+
+# Jika tidak ada parameter, akan menggunakan default route auth/login dari index.php
