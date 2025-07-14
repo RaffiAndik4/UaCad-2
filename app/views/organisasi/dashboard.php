@@ -157,6 +157,17 @@ $org_data = $org_data ?? ['nama_organisasi' => 'Organisasi', 'username' => 'Admi
             font-size: 18px;
         }
         
+        .profile-name {
+            font-weight: 600;
+            color: #1e293b;
+            font-size: 14px;
+        }
+        
+        .profile-role {
+            color: #64748b;
+            font-size: 12px;
+        }
+        
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -338,6 +349,65 @@ $org_data = $org_data ?? ['nama_organisasi' => 'Organisasi', 'username' => 'Admi
             border-color: #667eea;
         }
         
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 8px;
+        }
+        
+        .event-date {
+            font-size: 12px;
+            color: #64748b;
+            font-weight: 500;
+        }
+        
+        .event-status {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-draft {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        
+        .status-aktif {
+            background: #dcfce7;
+            color: #166534;
+        }
+        
+        .event-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 8px;
+        }
+        
+        .event-description {
+            color: #64748b;
+            font-size: 14px;
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+        
+        .event-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            font-size: 12px;
+            color: #64748b;
+        }
+        
+        .event-meta span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
         .shortcut-section {
             background: white;
             border-radius: 16px;
@@ -345,6 +415,13 @@ $org_data = $org_data ?? ['nama_organisasi' => 'Organisasi', 'username' => 'Admi
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             border: 1px solid #e2e8f0;
             margin-bottom: 24px;
+        }
+        
+        .shortcut-section h3 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 16px;
         }
         
         .shortcut-buttons {
@@ -368,6 +445,31 @@ $org_data = $org_data ?? ['nama_organisasi' => 'Organisasi', 'username' => 'Admi
             gap: 8px;
             transition: all 0.2s ease;
             cursor: pointer;
+        }
+        
+        .shortcut-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+            color: white;
+            text-decoration: none;
+        }
+        
+        /* Modal Styles */
+        .modal-header-custom {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-bottom: none;
+        }
+        
+        .btn-primary-modal {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+        }
+        
+        .btn-primary-modal:hover {
+            background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
+            color: white;
         }
         
         /* Responsive */
@@ -395,23 +497,49 @@ $org_data = $org_data ?? ['nama_organisasi' => 'Organisasi', 'username' => 'Admi
                 align-items: flex-start;
                 gap: 16px;
             }
+            
+            .shortcut-buttons {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
     <!-- Sidebar -->
-    <?php 
-    $current_page = 'dashboard';
-    include '../app/views/layouts/organisasi_sidebar.php'; 
-    ?></a>
-            <a href="<?= BASE_URL ?>organisasi/createEvent" class="nav-link">
-                <i class="fas fa-plus-circle"></i> Buat Event
+    <div class="sidebar">
+        <div class="logo">
+            <i class="fas fa-university"></i> UACAD
+        </div>
+        
+        <!-- Organization Info -->
+        <div class="org-info text-center mb-3" style="padding: 0 20px;">
+            <div class="org-avatar mb-2" style="width: 50px; height: 50px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto; color: white; font-weight: bold;">
+                <?= $org_initials ?>
+            </div>
+            <div style="color: rgba(255,255,255,0.9); font-size: 12px; line-height: 1.3;">
+                <?= htmlspecialchars(substr($org_data['nama_organisasi'] ?? 'Organisasi', 0, 20)) ?>
+                <?= strlen($org_data['nama_organisasi'] ?? '') > 20 ? '...' : '' ?>
+            </div>
+            <div style="color: rgba(255,255,255,0.7); font-size: 11px;">
+                <?= htmlspecialchars($org_data['jenis_organisasi'] ?? '') ?>
+            </div>
+        </div>
+        
+        <nav class="nav flex-column">
+            <a href="<?= BASE_URL ?>organisasi/dashboard" class="nav-link active">
+                <i class="fas fa-home"></i> Dashboard
+            </a>
+            <a href="<?= BASE_URL ?>organisasi/events" class="nav-link">
+                <i class="fas fa-calendar-check"></i> Kelola Event
             </a>
             <a href="<?= BASE_URL ?>organisasi/participants" class="nav-link">
-                <i class="fas fa-users"></i> Kelola Pendaftar
+                <i class="fas fa-users"></i> Peserta
             </a>
             <a href="<?= BASE_URL ?>organisasi/analytics" class="nav-link">
                 <i class="fas fa-chart-line"></i> Analitik
+            </a>
+            <a href="<?= BASE_URL ?>organisasi/reports" class="nav-link">
+                <i class="fas fa-file-alt"></i> Laporan
             </a>
             <a href="<?= BASE_URL ?>organisasi/profile" class="nav-link">
                 <i class="fas fa-building"></i> Profil Organisasi
@@ -420,6 +548,14 @@ $org_data = $org_data ?? ['nama_organisasi' => 'Organisasi', 'username' => 'Admi
                 <i class="fas fa-sign-out-alt"></i> Logout
             </a>
         </nav>
+        
+        <!-- Footer -->
+        <div style="position: absolute; bottom: 20px; left: 20px; right: 20px; text-align: center; color: rgba(255,255,255,0.6); font-size: 11px;">
+            <div>Logged in as:</div>
+            <div style="font-weight: 600; color: rgba(255,255,255,0.8);">
+                <?= htmlspecialchars($_SESSION['username'] ?? 'User') ?>
+            </div>
+        </div>
     </div>
 
     <!-- Main Content -->
@@ -586,7 +722,7 @@ $org_data = $org_data ?? ['nama_organisasi' => 'Organisasi', 'username' => 'Admi
     <div class="modal fade" id="createEventModal" tabindex="-1" aria-labelledby="createEventModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <div class="modal-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <div class="modal-header modal-header-custom">
                     <h5 class="modal-title">
                         <i class="fas fa-plus-circle"></i> Buat Event Baru
                     </h5>
@@ -667,7 +803,7 @@ $org_data = $org_data ?? ['nama_organisasi' => 'Organisasi', 'username' => 'Admi
                             </div>
                         </div>
 
-                        <!-- Upload Poster - SIMPLE VERSION -->
+                        <!-- Upload Poster -->
                         <div class="row mb-3">
                             <div class="col-12">
                                 <label for="poster_event" class="form-label fw-bold">Upload Poster Event</label>
@@ -712,7 +848,7 @@ $org_data = $org_data ?? ['nama_organisasi' => 'Organisasi', 'username' => 'Admi
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                             <i class="fas fa-times"></i> Batal
                         </button>
-                        <button type="submit" class="btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                        <button type="submit" class="btn btn-primary-modal">
                             <i class="fas fa-save"></i> Simpan Event
                         </button>
                     </div>
@@ -862,7 +998,7 @@ $org_data = $org_data ?? ['nama_organisasi' => 'Organisasi', 'username' => 'Admi
                 document.getElementById('tanggal_selesai').min = this.value;
             });
             
-            // Form submission - SIMPLE VERSION
+            // Form submission
             form.addEventListener('submit', function(e) {
                 e.preventDefault();
                 
@@ -922,8 +1058,7 @@ $org_data = $org_data ?? ['nama_organisasi' => 'Organisasi', 'username' => 'Admi
         console.log('Dashboard loaded successfully!');
         console.log('Organization data:', <?= json_encode($org_data) ?>);
         console.log('Stats:', <?= json_encode($stats) ?>);
-        console.log('All events count:', <?= count($all_events ?? []) ?>);
-        console.log('User session:', <?= json_encode($user_session ?? []) ?>);
+        console.log('Active events count:', <?= count($active_events ?? []) ?>);
         
         // Real-time stats update
         document.addEventListener('DOMContentLoaded', function() {
@@ -933,7 +1068,7 @@ $org_data = $org_data ?? ['nama_organisasi' => 'Organisasi', 'username' => 'Admi
         function updateRealTimeStats() {
             // Stats yang konsisten dengan halaman Events
             const realStats = <?= json_encode($stats) ?>;
-            const events = <?= json_encode($all_events ?? []) ?>;
+            const events = <?= json_encode($active_events ?? []) ?>;
             
             console.log('Real stats from integrated data:', realStats);
             console.log('Total events from database:', events.length);

@@ -801,4 +801,453 @@ class Event {
             return false;
         }
     }
+    public function countMahasiswaEvents($mahasiswaId) {
+    try {
+        $query = "SELECT COUNT(*) as count 
+                  FROM event_participants ep
+                  JOIN mahasiswa m ON ep.user_id = m.user_id
+                  WHERE m.id = ?";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bind_param("i", $mahasiswaId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        
+        return (int)($row['count'] ?? 0);
+        
+    } catch (Exception $e) {
+        error_log("Error counting mahasiswa events: " . $e->getMessage());
+        return 0;
+    }
+}
+
+public function countAttendedEvents($mahasiswaId) {
+    try {
+        $query = "SELECT COUNT(*) as count 
+                  FROM event_participants ep
+                  JOIN mahasiswa m ON ep.user_id = m.user_id
+                  WHERE m.id = ? AND ep.status = 'hadir'";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bind_param("i", $mahasiswaId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        
+        return (int)($row['count'] ?? 0);
+        
+    } catch (Exception $e) {
+        error_log("Error counting attended events: " . $e->getMessage());
+        return 0;
+    }
+}
+
+public function countUpcomingEvents($mahasiswaId) {
+    try {
+        $query = "SELECT COUNT(*) as count 
+                  FROM event_participants ep
+                  JOIN events e ON ep.event_id = e.id
+                  JOIN mahasiswa m ON ep.user_id = m.user_id
+                  WHERE m.id = ? 
+                  AND e.tanggal_mulai > NOW()
+                  AND e.status = 'aktif'";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bind_param("i", $mahasiswaId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        
+        return (int)($row['count'] ?? 0);
+        
+    } catch (Exception $e) {
+        error_log("Error counting upcoming events: " . $e->getMessage());
+        return 0;
+    }
+}
+
+// Event Registration Methods
+public function isMahasiswaRegistered($eventId, $mahasiswaId) {
+    try {
+        $query = "SELECT COUNT(*) as count 
+                  FROM event_participants ep
+                  JOIN mahasiswa m ON ep.user_id = m.user_id
+                  WHERE ep.event_id = ? AND m.id = ?";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bind_param("ii", $eventId, $mahasiswaId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        
+        return ($row['count'] ?? 0) > 0;
+        
+    } catch (Exception $e) {
+        error_log("Error checking mahasiswa registration: " . $e->getMessage());
+        return false;
+    }
+}
+
+public function isEventFull($eventId) {
+    try {
+        $query = "SELECT e.kapasitas, COUNT(ep.id) as registered_count
+                  FROM events e
+                  LEFT JOIN event_participants ep ON e.id = ep.event_id
+                  WHERE e.id = ?
+                  GROUP BY e.id";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bind_param("i", $eventId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $row = $result->fetch_assoc();
+        
+        if (!$row) return true; // Event not found, consider it full
+        
+        return ($row['registered_count'] ?? 0) >= ($row['kapasitas'] ?? 0);
+        
+    } catch (Exception $e) {
+        error_log("Error checking if event is full: " . $e->getMessage());
+        return true; // Return true to be safe
+    }
+}
+
+public function registerMahasiswaToEvent($eventId, $mahasiswaId) {
+    try {
+        // Get user_id from mahasiswa_id
+        $userQuery = "SELECT user_id FROM mahasiswa WHERE id = ?";
+        $stmt = $this->conn->prepare($userQuery);
+        $stmt->bind_param("i", $mahasiswaId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $mahasiswa = $result->fetch_assoc();
+        
+        if (!$mahasiswa) {
+            throw new Exception("Mahasiswa not found");
+        }
+        
+        $userId = $mahasiswa['user_id'];
+        
+        // Register to event
+        $query = "INSERT INTO event_participants (event_id, user_id, status, registered_at) 
+                  VALUES (?, ?, 'terdaftar', CURRENT_TIMESTAMP)";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bind_param("ii", $eventId, $userId);
+        
+        return $stmt->execute();
+        
+    } catch (Exception $e) {
+        error_log("Error registering mahasiswa to event: " . $e->getMessage());
+        return false;
+    }
+}
+
+public function cancelMahasiswaRegistration($eventId, $mahasiswaId) {
+    try {
+        // Get user_id from mahasiswa_id
+        $userQuery = "SELECT user_id FROM mahasiswa WHERE id = ?";
+        $stmt = $this->conn->prepare($userQuery);
+        $stmt->bind_param("i", $mahasiswaId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        $mahasiswa = $result->fetch_assoc();
+        
+        if (!$mahasiswa) {
+            throw new Exception("Mahasiswa not found");
+        }
+        
+        $userId = $mahasiswa['user_id'];
+        
+        // Cancel registration
+        $query = "DELETE FROM event_participants WHERE event_id = ? AND user_id = ?";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bind_param("ii", $eventId, $userId);
+        
+        return $stmt->execute();
+        
+    } catch (Exception $e) {
+        error_log("Error canceling mahasiswa registration: " . $e->getMessage());
+        return false;
+    }
+}
+
+// Event Recommendations and Discovery
+public function getRecommendationsForMahasiswa($fakultas, $minat, $mahasiswaId) {
+    try {
+        $query = "SELECT e.*, o.nama_organisasi,
+                         COUNT(ep.id) as registered_count,
+                         (e.kapasitas - COUNT(ep.id)) as remaining_slots
+                  FROM events e
+                  JOIN organisasi o ON e.organisasi_id = o.id
+                  LEFT JOIN event_participants ep ON e.id = ep.event_id
+                  WHERE e.status = 'aktif' 
+                  AND e.tanggal_mulai > NOW()
+                  AND e.id NOT IN (
+                      SELECT ep2.event_id FROM event_participants ep2 
+                      JOIN mahasiswa m ON ep2.user_id = m.user_id 
+                      WHERE m.id = ?
+                  )
+                  AND (e.kategori LIKE ? OR e.nama_event LIKE ? OR e.deskripsi LIKE ?)
+                  GROUP BY e.id
+                  HAVING remaining_slots > 0
+                  ORDER BY e.tanggal_mulai ASC
+                  LIMIT 6";
+        
+        $minatPattern = "%$minat%";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bind_param("isss", $mahasiswaId, $minatPattern, $minatPattern, $minatPattern);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        $recommendations = [];
+        while ($row = $result->fetch_assoc()) {
+            $recommendations[] = $row;
+        }
+        
+        return $recommendations;
+        
+    } catch (Exception $e) {
+        error_log("Error getting event recommendations: " . $e->getMessage());
+        return [];
+    }
+}
+
+public function getDistinctCategories() {
+    try {
+        $query = "SELECT DISTINCT kategori FROM events WHERE kategori IS NOT NULL AND kategori != '' ORDER BY kategori";
+        $result = $this->conn->query($query);
+        
+        $categories = [];
+        while ($row = $result->fetch_assoc()) {
+            $categories[] = $row['kategori'];
+        }
+        
+        return $categories;
+        
+    } catch (Exception $e) {
+        error_log("Error getting distinct categories: " . $e->getMessage());
+        return [];
+    }
+}
+
+public function getParticipationHistory($mahasiswaId) {
+    try {
+        $query = "SELECT e.*, o.nama_organisasi, ep.status as participation_status, 
+                         ep.registered_at, ep.attended_at
+                  FROM event_participants ep
+                  JOIN events e ON ep.event_id = e.id
+                  JOIN organisasi o ON e.organisasi_id = o.id
+                  JOIN mahasiswa m ON ep.user_id = m.user_id
+                  WHERE m.id = ?
+                  ORDER BY ep.registered_at DESC";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bind_param("i", $mahasiswaId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        $history = [];
+        while ($row = $result->fetch_assoc()) {
+            $history[] = $row;
+        }
+        
+        return $history;
+        
+    } catch (Exception $e) {
+        error_log("Error getting participation history: " . $e->getMessage());
+        return [];
+    }
+}
+
+// Recent Events Methods
+public function getRecentEventsForMahasiswa($mahasiswaId, $limit = 5) {
+    try {
+        $query = "SELECT e.*, o.nama_organisasi, 
+                         COUNT(ep.id) as registered_count,
+                         (e.kapasitas - COUNT(ep.id)) as remaining_slots,
+                         CASE WHEN mep.event_id IS NOT NULL THEN 1 ELSE 0 END as is_registered
+                  FROM events e
+                  JOIN organisasi o ON e.organisasi_id = o.id
+                  LEFT JOIN event_participants ep ON e.id = ep.event_id
+                  LEFT JOIN event_participants mep ON e.id = mep.event_id 
+                       AND mep.user_id = (SELECT user_id FROM mahasiswa WHERE id = ?)
+                  WHERE e.status = 'aktif' 
+                  AND e.tanggal_mulai > NOW()
+                  GROUP BY e.id
+                  ORDER BY e.created_at DESC
+                  LIMIT ?";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bind_param("ii", $mahasiswaId, $limit);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        $events = [];
+        while ($row = $result->fetch_assoc()) {
+            $events[] = $row;
+        }
+        
+        return $events;
+        
+    } catch (Exception $e) {
+        error_log("Error getting recent events for mahasiswa: " . $e->getMessage());
+        return [];
+    }
+}
+
+// Available Events with Filters
+public function getAvailableEvents($limit = null, $offset = 0, $filters = []) {
+    try {
+        $query = "SELECT e.*, o.nama_organisasi, 
+                         COUNT(ep.id) as registered_count,
+                         (e.kapasitas - COUNT(ep.id)) as remaining_slots
+                  FROM events e
+                  JOIN organisasi o ON e.organisasi_id = o.id
+                  LEFT JOIN event_participants ep ON e.id = ep.event_id
+                  WHERE e.status = 'aktif' 
+                  AND e.tanggal_mulai > NOW()";
+        
+        $params = [];
+        $types = "";
+        
+        // Add filters
+        if (!empty($filters['category'])) {
+            $query .= " AND e.kategori = ?";
+            $params[] = $filters['category'];
+            $types .= "s";
+        }
+        
+        if (!empty($filters['search'])) {
+            $query .= " AND (e.nama_event LIKE ? OR e.deskripsi LIKE ?)";
+            $searchTerm = "%" . $filters['search'] . "%";
+            $params[] = $searchTerm;
+            $params[] = $searchTerm;
+            $types .= "ss";
+        }
+        
+        $query .= " GROUP BY e.id
+                   HAVING remaining_slots > 0
+                   ORDER BY e.tanggal_mulai ASC";
+        
+        if ($limit) {
+            $query .= " LIMIT ? OFFSET ?";
+            $params[] = $limit;
+            $params[] = $offset;
+            $types .= "ii";
+        }
+        
+        $stmt = $this->conn->prepare($query);
+        
+        if (!empty($params)) {
+            $stmt->bind_param($types, ...$params);
+        }
+        
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        $events = [];
+        while ($row = $result->fetch_assoc()) {
+            $events[] = $row;
+        }
+        
+        return $events;
+        
+    } catch (Exception $e) {
+        error_log("Error getting available events: " . $e->getMessage());
+        return [];
+    }
+}
+
+// Mahasiswa Event Management
+public function getMahasiswaEvents($mahasiswaId) {
+    try {
+        $query = "SELECT e.*, o.nama_organisasi, ep.status as participation_status, 
+                         ep.registered_at, ep.attended_at
+                  FROM event_participants ep
+                  JOIN events e ON ep.event_id = e.id
+                  JOIN organisasi o ON e.organisasi_id = o.id
+                  JOIN mahasiswa m ON ep.user_id = m.user_id
+                  WHERE m.id = ?
+                  ORDER BY e.tanggal_mulai DESC";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bind_param("i", $mahasiswaId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        $events = [];
+        while ($row = $result->fetch_assoc()) {
+            $events[] = $row;
+        }
+        
+        return $events;
+        
+    } catch (Exception $e) {
+        error_log("Error getting mahasiswa events: " . $e->getMessage());
+        return [];
+    }
+}
+
+public function getMahasiswaEventHistory($mahasiswaId) {
+    try {
+        $query = "SELECT e.*, o.nama_organisasi, ep.status as participation_status, 
+                         ep.registered_at, ep.attended_at
+                  FROM event_participants ep
+                  JOIN events e ON ep.event_id = e.id
+                  JOIN organisasi o ON e.organisasi_id = o.id
+                  JOIN mahasiswa m ON ep.user_id = m.user_id
+                  WHERE m.id = ? AND e.status = 'selesai'
+                  ORDER BY e.tanggal_mulai DESC";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bind_param("i", $mahasiswaId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        $events = [];
+        while ($row = $result->fetch_assoc()) {
+            $events[] = $row;
+        }
+        
+        return $events;
+        
+    } catch (Exception $e) {
+        error_log("Error getting mahasiswa event history: " . $e->getMessage());
+        return [];
+    }
+}
+
+public function getMahasiswaEventSchedule($mahasiswaId) {
+    try {
+        $query = "SELECT e.*, o.nama_organisasi, ep.status as participation_status
+                  FROM event_participants ep
+                  JOIN events e ON ep.event_id = e.id
+                  JOIN organisasi o ON e.organisasi_id = o.id
+                  JOIN mahasiswa m ON ep.user_id = m.user_id
+                  WHERE m.id = ? 
+                  AND e.status IN ('aktif', 'draft')
+                  AND e.tanggal_mulai >= CURDATE()
+                  ORDER BY e.tanggal_mulai ASC";
+        
+        $stmt = $this->conn->prepare($query);
+        $stmt->bind_param("i", $mahasiswaId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        $events = [];
+        while ($row = $result->fetch_assoc()) {
+            $events[] = $row;
+        }
+        
+        return $events;
+        
+    } catch (Exception $e) {
+        error_log("Error getting mahasiswa event schedule: " . $e->getMessage());
+        return [];
+    }
+}
 }

@@ -1,0 +1,235 @@
+/* Import Font */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+/* Variabel Warna & Properti Dasar */
+:root {
+    --primary-color: #4a55a2;
+    --secondary-color: #7895cb;
+    --light-color: #c5dff8;
+    --bg-color: #f4f7fe;
+    --text-color: #333;
+    --sidebar-bg: #2c3e50;
+    --sidebar-text: #ecf0f1;
+    --sidebar-active: var(--primary-color);
+    --card-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    --border-radius: 12px;
+}
+
+body {
+    font-family: 'Poppins', sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    margin: 0;
+    display: flex;
+}
+
+/* --- Sidebar --- */
+.sidebar {
+    width: 260px;
+    background-color: var(--sidebar-bg);
+    color: var(--sidebar-text);
+    display: flex;
+    flex-direction: column;
+    padding: 20px 0;
+    position: fixed;
+    height: 100%;
+    left: 0;
+    top: 0;
+}
+
+.logo {
+    font-size: 24px;
+    font-weight: 700;
+    text-align: center;
+    padding: 0 20px 20px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.profile-card {
+    display: flex;
+    align-items: center;
+    padding: 20px;
+    gap: 15px;
+}
+
+.profile-avatar {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background-color: var(--primary-color);
+    color: white;
+    font-size: 24px;
+    font-weight: 600;
+    display: grid;
+    place-items: center;
+}
+
+.profile-name {
+    font-weight: 600;
+}
+
+.profile-role {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.nav-menu {
+    flex-grow: 1;
+    padding: 0 20px;
+}
+
+.nav-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.5);
+    margin: 20px 0 10px 0;
+}
+
+.nav-link {
+    display: flex;
+    align-items: center;
+    padding: 12px 15px;
+    border-radius: 8px;
+    color: var(--sidebar-text);
+    text-decoration: none;
+    margin-bottom: 5px;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+.nav-link i {
+    width: 20px;
+    margin-right: 15px;
+    text-align: center;
+}
+
+.nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.nav-link.active {
+    background-color: var(--sidebar-active);
+    color: white;
+    font-weight: 600;
+}
+
+
+/* --- Konten Utama --- */
+.main-content {
+    margin-left: 260px; /* Lebar sidebar */
+    flex-grow: 1;
+    padding: 30px;
+}
+
+.header-dashboard {
+    margin-bottom: 30px;
+}
+
+.header-dashboard h1 {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.header-dashboard p {
+    color: #6c757d;
+    margin: 0;
+}
+
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 30px;
+}
+
+/* --- Kalender --- */
+.calendar-container {
+    background-color: white;
+    padding: 25px;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+}
+
+.fc { /* FullCalendar styling */
+    font-size: 14px;
+}
+.fc .fc-toolbar-title {
+    font-size: 20px;
+    font-weight: 600;
+}
+.fc .fc-button {
+    background-color: var(--primary-color) !important;
+    border: none !important;
+    opacity: 0.9;
+}
+.fc .fc-button:hover {
+    opacity: 1;
+}
+.fc .fc-daygrid-day.fc-day-today {
+    background-color: var(--light-color);
+}
+.fc-event {
+    cursor: pointer;
+}
+
+/* --- Kolom Kanan (Jadwal & Rekomendasi) --- */
+.sidebar-right .card {
+    background-color: white;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    padding: 20px;
+    margin-bottom: 30px;
+}
+
+.card-title {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 20px;
+}
+
+/* Jadwal Hari Ini */
+.schedule-item {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 12px 0;
+    border-bottom: 1px solid #eee;
+}
+.schedule-item:last-child {
+    border-bottom: none;
+}
+.schedule-time {
+    font-weight: 600;
+    color: var(--primary-color);
+}
+.schedule-title {
+    font-size: 14px;
+}
+#no-schedule-today {
+    color: #888;
+    text-align: center;
+    padding: 20px 0;
+}
+
+/* Rekomendasi Event */
+.event-card {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+.event-poster {
+    width: 80px;
+    height: 80px;
+    object-fit: cover;
+    border-radius: 8px;
+}
+.event-details h5 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 5px 0;
+}
+.event-details p {
+    font-size: 13px;
+    color: #6c757d;
+    margin: 0;
+}

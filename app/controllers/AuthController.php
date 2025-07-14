@@ -171,7 +171,7 @@ class AuthController extends Controller {
         $file = $_FILES[$fileField];
         
         // Validate file
-        $allowedTypes = ['pdf', 'jpg', 'jpeg', 'png'];
+        $allowedTypes = ['pdf', 'jpg', 'jpeg', 'png', "xlsx"];
         $maxSize = 5 * 1024 * 1024; // 5MB
         
         $fileName = $file['name'];
