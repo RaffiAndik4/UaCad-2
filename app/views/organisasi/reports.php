@@ -11,25 +11,14 @@
 <body style="background-color: #f8fafc;">
     <div class="container-fluid">
         <div class="row">
-            <!-- Simple Sidebar -->
-            <div class="col-md-2 bg-primary text-white p-3" style="min-height: 100vh;">
-                <h5><i class="fas fa-university"></i> UACAD</h5>
-                <hr>
-                <div class="nav flex-column">
-                    <a href="<?= BASE_URL ?>organisasi/dashboard" class="nav-link text-white">
-                        <i class="fas fa-home"></i> Dashboard
-                    </a>
-                    <a href="<?= BASE_URL ?>organisasi/events" class="nav-link text-white">
-                        <i class="fas fa-calendar"></i> Event
-                    </a>
-                    <a href="#" class="nav-link text-white bg-secondary rounded">
-                        <i class="fas fa-chart-line"></i> Laporan
-                    </a>
-                </div>
-            </div>
+            <!-- Sidebar -->
+            <?php 
+            $current_page = 'reports';
+            include '../app/views/layouts/organisasi_sidebar.php'; 
+            ?>
             
             <!-- Main Content -->
-            <div class="col-md-10 p-4">
+            <div class="col-md-10 p-4" style="margin-left: 260px;">
                 <div class="d-flex justify-content-between align-items-center mb-4">
                     <div>
                         <h2>Laporan Event</h2>

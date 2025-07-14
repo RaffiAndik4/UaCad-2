@@ -28,13 +28,28 @@ class OrganisasiController extends Controller {
                 throw new Exception("Data organisasi tidak ditemukan");
             }
             
+            // Get stats with proper error handling and default values
+            $rawStats = $this->eventModel->getStatsByOrganisasiId($orgData['id']);
+            
+            // Ensure all required keys exist with default values
+            $stats = [
+                'total_events' => $rawStats['total_events'] ?? 0,
+                'total_capacity' => $rawStats['total_capacity'] ?? 0,
+                'active_events' => $rawStats['active_events'] ?? 0
+            ];
+            
+            // Get other data with error handling
+            $trend_data = $this->eventModel->getTrendData($orgData['id']) ?? [];
+            $category_data = $this->eventModel->getCategoryData($orgData['id']) ?? [];
+            $active_events = $this->eventModel->getActiveEvents($orgData['id']) ?? [];
+            
             $data = [
                 'title' => 'Dashboard Organisasi',
                 'org_data' => $orgData,
-                'stats' => $this->eventModel->getStatsByOrganisasiId($orgData['id']),
-                'trend_data' => $this->eventModel->getTrendData($orgData['id']),
-                'category_data' => $this->eventModel->getCategoryData($orgData['id']),
-                'active_events' => $this->eventModel->getActiveEvents($orgData['id'])
+                'stats' => $stats,
+                'trend_data' => $trend_data,
+                'category_data' => $category_data,
+                'active_events' => $active_events
             ];
             
             // Handle AJAX create event
@@ -47,11 +62,23 @@ class OrganisasiController extends Controller {
             
         } catch (Exception $e) {
             error_log("Dashboard error: " . $e->getMessage());
+            
+            // Provide safe fallback data
             $this->view('organisasi/dashboard', [
                 'title' => 'Dashboard Organisasi',
                 'error' => $e->getMessage(),
-                'org_data' => ['nama_organisasi' => 'Organisasi', 'username' => 'Admin', 'jenis_organisasi' => 'Organisasi'],
-                'stats' => ['total_events' => 0, 'total_capacity' => 0, 'active_events' => 0],
+                'org_data' => [
+                    'nama_organisasi' => 'Organisasi', 
+                    'username' => $_SESSION['username'] ?? 'Admin', 
+                    'jenis_organisasi' => 'Organisasi'
+                ],
+                'stats' => [
+                    'total_events' => 0, 
+                    'total_capacity' => 0, 
+                    'active_events' => 0
+                ],
+                'trend_data' => [],
+                'category_data' => [],
                 'active_events' => []
             ]);
         }
@@ -83,16 +110,16 @@ class OrganisasiController extends Controller {
                 }
             }
             
-            // Simple event data
+            // Simple event data with validation
             $eventData = [
                 'organisasi_id' => $orgData['id'],
-                'nama_event' => $_POST['nama_event'],
-                'deskripsi' => $_POST['deskripsi'] ?? '',
-                'kategori' => $_POST['kategori'],
-                'tanggal_mulai' => $_POST['tanggal_mulai'],
+                'nama_event' => trim($_POST['nama_event'] ?? ''),
+                'deskripsi' => trim($_POST['deskripsi'] ?? ''),
+                'kategori' => trim($_POST['kategori'] ?? ''),
+                'tanggal_mulai' => $_POST['tanggal_mulai'] ?? null,
                 'tanggal_selesai' => $_POST['tanggal_selesai'] ?? null,
-                'lokasi' => $_POST['lokasi'],
-                'kapasitas' => intval($_POST['kapasitas']),
+                'lokasi' => trim($_POST['lokasi'] ?? ''),
+                'kapasitas' => intval($_POST['kapasitas'] ?? 0),
                 'poster' => $posterName,
                 'status' => $_POST['status'] ?? 'draft'
             ];
@@ -100,6 +127,16 @@ class OrganisasiController extends Controller {
             // Simple validation
             if (empty($eventData['nama_event']) || empty($eventData['kategori']) || empty($eventData['lokasi'])) {
                 echo json_encode(['success' => false, 'message' => 'Data tidak lengkap!']);
+                return;
+            }
+            
+            if ($eventData['kapasitas'] <= 0) {
+                echo json_encode(['success' => false, 'message' => 'Kapasitas harus lebih dari 0!']);
+                return;
+            }
+            
+            if (empty($eventData['tanggal_mulai'])) {
+                echo json_encode(['success' => false, 'message' => 'Tanggal mulai harus diisi!']);
                 return;
             }
             
@@ -112,6 +149,7 @@ class OrganisasiController extends Controller {
             }
             
         } catch (Exception $e) {
+            error_log("Create event error: " . $e->getMessage());
             echo json_encode(['success' => false, 'message' => 'Error: ' . $e->getMessage()]);
         }
     }

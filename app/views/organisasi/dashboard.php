@@ -400,17 +400,10 @@ $org_data = $org_data ?? ['nama_organisasi' => 'Organisasi', 'username' => 'Admi
 </head>
 <body>
     <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="logo">
-            <i class="fas fa-university"></i> UACAD
-        </div>
-        <nav class="nav flex-column">
-            <a href="<?= BASE_URL ?>organisasi/dashboard" class="nav-link active">
-                <i class="fas fa-home"></i> Dashboard
-            </a>
-            <a href="<?= BASE_URL ?>organisasi/events" class="nav-link">
-                <i class="fas fa-calendar-check"></i> Event Saya
-            </a>
+    <?php 
+    $current_page = 'dashboard';
+    include '../app/views/layouts/organisasi_sidebar.php'; 
+    ?></a>
             <a href="<?= BASE_URL ?>organisasi/createEvent" class="nav-link">
                 <i class="fas fa-plus-circle"></i> Buat Event
             </a>
@@ -925,7 +918,26 @@ $org_data = $org_data ?? ['nama_organisasi' => 'Organisasi', 'username' => 'Admi
             });
         });
 
+        // Dashboard loaded successfully dengan data terintegrasi
         console.log('Dashboard loaded successfully!');
+        console.log('Organization data:', <?= json_encode($org_data) ?>);
+        console.log('Stats:', <?= json_encode($stats) ?>);
+        console.log('All events count:', <?= count($all_events ?? []) ?>);
+        console.log('User session:', <?= json_encode($user_session ?? []) ?>);
+        
+        // Real-time stats update
+        document.addEventListener('DOMContentLoaded', function() {
+            updateRealTimeStats();
+        });
+        
+        function updateRealTimeStats() {
+            // Stats yang konsisten dengan halaman Events
+            const realStats = <?= json_encode($stats) ?>;
+            const events = <?= json_encode($all_events ?? []) ?>;
+            
+            console.log('Real stats from integrated data:', realStats);
+            console.log('Total events from database:', events.length);
+        }
     </script>
 </body>
 </html>

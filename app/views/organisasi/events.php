@@ -303,31 +303,10 @@
 </head>
 <body>
     <!-- Sidebar -->
-    <div class="sidebar">
-        <div class="logo">
-            <i class="fas fa-university"></i> UACAD
-        </div>
-        <nav class="nav flex-column">
-            <a href="<?= BASE_URL ?>organisasi/dashboard" class="nav-link">
-                <i class="fas fa-home"></i> Dashboard
-            </a>
-            <a href="<?= BASE_URL ?>organisasi/events" class="nav-link active">
-                <i class="fas fa-calendar-check"></i> Kelola Event
-            </a>
-            <a href="<?= BASE_URL ?>organisasi/participants" class="nav-link">
-                <i class="fas fa-users"></i> Peserta
-            </a>
-            <a href="<?= BASE_URL ?>organisasi/analytics" class="nav-link">
-                <i class="fas fa-chart-line"></i> Analitik
-            </a>
-            <a href="<?= BASE_URL ?>organisasi/profile" class="nav-link">
-                <i class="fas fa-building"></i> Profil
-            </a>
-            <a href="<?= BASE_URL ?>auth/logout" class="nav-link">
-                <i class="fas fa-sign-out-alt"></i> Logout
-            </a>
-        </nav>
-    </div>
+    <?php 
+    $current_page = 'events';
+    include '../app/views/layouts/organisasi_sidebar.php'; 
+    ?>
 
     <!-- Main Content -->
     <div class="main-content">
@@ -344,7 +323,27 @@
             </div>
         </div>
 
-        <!-- Stats Overview -->
+        <!-- Error Display -->
+        <?php if (isset($error)): ?>
+            <div class="alert alert-danger">
+                <h5><i class="fas fa-exclamation-triangle"></i> Error</h5>
+                <p><?= htmlspecialchars($error) ?></p>
+                <hr>
+                <div class="mb-0">
+                    <a href="<?= BASE_URL ?>auth/logout" class="btn btn-sm btn-outline-danger">Logout & Login Ulang</a>
+                    <a href="<?= BASE_URL ?>organisasi/dashboard" class="btn btn-sm btn-outline-primary">Kembali ke Dashboard</a>
+                </div>
+            </div>
+        <?php endif; ?>
+
+        <!-- Session Check -->
+        <?php if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'organisasi'): ?>
+            <div class="alert alert-warning">
+                <h5><i class="fas fa-user-times"></i> Session Invalid</h5>
+                <p>Session Anda tidak valid atau sudah expired.</p>
+                <a href="<?= BASE_URL ?>auth/login" class="btn btn-primary">Login Ulang</a>
+            </div>
+        <?php else: ?>
         <div class="stats-overview">
             <div class="stat-card stat-draft">
                 <i class="fas fa-edit"></i>
@@ -580,6 +579,8 @@
         </div>
     </div>
 
+    <?php endif; // End session check ?>
+    
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
@@ -591,65 +592,83 @@
         
         // Load events when page loads
         document.addEventListener('DOMContentLoaded', function() {
-            loadEvents();
+            loadEventsFromServer();
             setupEventHandlers();
         });
         
-        function loadEvents() {
-            // Sample data - dalam implementasi nyata, ambil dari server
-            events = [
-                {
-                    id: 1,
-                    nama_event: 'Workshop Web Development',
-                    kategori: 'workshop',
-                    deskripsi: 'Belajar membuat website modern dengan HTML, CSS, dan JavaScript',
-                    tanggal_mulai: '2025-07-25 09:00:00',
-                    tanggal_selesai: '2025-07-25 17:00:00',
-                    lokasi: 'Lab Komputer A',
-                    kapasitas: 50,
-                    status: 'aktif',
-                    poster: 'workshop_poster.jpg',
-                    peserta_terdaftar: 35,
-                    peserta_hadir: 32,
-                    rating: 4.5
-                },
-                {
-                    id: 2,
-                    nama_event: 'Seminar AI & Machine Learning',
-                    kategori: 'seminar',
-                    deskripsi: 'Membahas perkembangan terkini dalam bidang AI',
-                    tanggal_mulai: '2025-07-28 13:00:00',
-                    tanggal_selesai: '2025-07-28 16:00:00',
-                    lokasi: 'Aula Utama',
-                    kapasitas: 100,
-                    status: 'draft',
-                    poster: null,
-                    peserta_terdaftar: 0,
-                    peserta_hadir: 0,
-                    rating: 0
-                },
-                {
-                    id: 3,
-                    nama_event: 'Kompetisi Programming 2025',
-                    kategori: 'kompetisi',
-                    deskripsi: 'Lomba programming tingkat universitas',
-                    tanggal_mulai: '2025-06-15 08:00:00',
-                    tanggal_selesai: '2025-06-15 18:00:00',
-                    lokasi: 'Lab Programming',
-                    kapasitas: 75,
-                    status: 'selesai',
-                    poster: 'programming_contest.jpg',
-                    peserta_terdaftar: 68,
-                    peserta_hadir: 65,
-                    rating: 4.8
-                }
-            ];
+        function loadEventsFromServer() {
+            // Show loading
+            showLoading();
             
+            // Get events from server via AJAX
+            fetch('<?= BASE_URL ?>organisasi/events', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'action=get_events'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    events = data.events;
+                    updateStatsFromServer(data.stats);
+                    renderAllTabs();
+                } else {
+                    console.error('Error loading events:', data.message);
+                    // Use PHP data as fallback
+                    loadEventsFromPHP();
+                }
+            })
+            .catch(error => {
+                console.error('AJAX error:', error);
+                // Use PHP data as fallback
+                loadEventsFromPHP();
+            });
+        }
+        
+        function loadEventsFromPHP() {
+            // Fallback: use PHP data passed to page
+            events = <?= json_encode($all_events ?? []) ?>;
+            const phpStats = <?= json_encode($stats ?? []) ?>;
+            updateStatsFromServer(phpStats);
+            renderAllTabs();
+        }
+        
+        function updateStatsFromServer(stats) {
+            document.getElementById('stat-draft').textContent = stats.draft || 0;
+            document.getElementById('stat-active').textContent = stats.aktif || 0;
+            document.getElementById('stat-finished').textContent = stats.selesai || 0;
+            document.getElementById('stat-cancelled').textContent = stats.dibatalkan || 0;
+        }
+        
+        function renderAllTabs() {
             updateStats();
             renderActiveEvents();
             renderDraftEvents();
             renderFinishedEvents();
             renderAllEvents();
+        }
+        
+        function showLoading() {
+            const containers = [
+                'active-events-list',
+                'draft-events-list', 
+                'finished-events-table-body',
+                'all-events-table-body'
+            ];
+            
+            containers.forEach(id => {
+                const container = document.getElementById(id);
+                if (container) {
+                    container.innerHTML = `
+                        <div class="text-center py-4">
+                            <i class="fas fa-spinner fa-spin text-muted" style="font-size: 2rem;"></i>
+                            <br><small class="text-muted">Memuat data...</small>
+                        </div>
+                    `;
+                }
+            });
         }
         
         function updateStats() {
@@ -1160,17 +1179,32 @@
             if (!event) return;
             
             if (confirm(`Yakin ingin menghapus event "${event.nama_event}"?`)) {
-                events = events.filter(e => e.id !== id);
+                // Show loading
+                showToast('Menghapus event...', 'info');
                 
-                // Update displays
-                updateStats();
-                renderActiveEvents();
-                renderDraftEvents();
-                renderFinishedEvents();
-                renderAllEvents();
+                // Send AJAX request
+                const formData = new FormData();
+                formData.append('action', 'delete_event');
+                formData.append('event_id', id);
                 
-                // Show success message
-                showToast('Event berhasil dihapus!', 'success');
+                fetch('<?= BASE_URL ?>organisasi/events', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast(data.message, 'success');
+                        // Reload events
+                        loadEventsFromServer();
+                    } else {
+                        showToast(data.message, 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Delete error:', error);
+                    showToast('Terjadi kesalahan sistem!', 'danger');
+                });
             }
         }
         
@@ -1179,15 +1213,32 @@
             if (!event) return;
             
             if (confirm(`Publikasi event "${event.nama_event}"?`)) {
-                event.status = 'aktif';
+                // Show loading
+                showToast('Mempublikasi event...', 'info');
                 
-                // Update displays
-                updateStats();
-                renderActiveEvents();
-                renderDraftEvents();
-                renderAllEvents();
+                // Send AJAX request
+                const formData = new FormData();
+                formData.append('action', 'publish_event');
+                formData.append('event_id', id);
                 
-                showToast('Event berhasil dipublikasi!', 'success');
+                fetch('<?= BASE_URL ?>organisasi/events', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showToast(data.message, 'success');
+                        // Reload events
+                        loadEventsFromServer();
+                    } else {
+                        showToast(data.message, 'danger');
+                    }
+                })
+                .catch(error => {
+                    console.error('Publish error:', error);
+                    showToast('Terjadi kesalahan sistem!', 'danger');
+                });
             }
         }
         
