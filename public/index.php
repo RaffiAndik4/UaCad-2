@@ -24,7 +24,14 @@ $params = array_slice($url, 2);
 
 // Check if controller file exists
 $controllerFile = '../app/controllers/' . $controllerName . '.php';
-
+// public/index.php - Tambahkan routing untuk LLM
+$routes = [
+    // ... existing routes
+    'llm/generateRecommendations' => 'LLMController@generateRecommendations',
+    'llm/chatbot' => 'LLMController@chatbot',
+    'llm/getAnalytics' => 'LLMController@getAnalytics',
+    'organisasi/ai-recommendations' => 'OrganisasiController@aiRecommendations'
+];
 if (file_exists($controllerFile)) {
     require_once $controllerFile;
     

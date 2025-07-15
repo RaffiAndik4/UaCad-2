@@ -62,7 +62,7 @@ class AuthController extends Controller {
                                 $this->redirect('organisasi/dashboard');
                                 break;
                             case 'mahasiswa':
-                                $this->redirect('mahasiswa/dashboard');
+                                $this->redirect('mahasiswa/landing');
                                 break;
                             case 'staff':
                                 $this->redirect('staff/dashboard');

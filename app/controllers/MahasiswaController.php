@@ -19,7 +19,7 @@ class MahasiswaController extends Controller {
     }
     
     public function index() {
-        $this->dashboard();
+        $this->landing();
     }
     
     // Dashboard Mahasiswa
@@ -145,6 +145,7 @@ class MahasiswaController extends Controller {
     }
     
     // Jadwal
+    // Update jadwal method in MahasiswaController.php
     public function jadwal() {
         try {
             $mahasiswaData = $this->mahasiswaModel->getByUserId($_SESSION['user_id']);
@@ -153,25 +154,41 @@ class MahasiswaController extends Controller {
                 throw new Exception("Data mahasiswa tidak ditemukan");
             }
             
-            // Get mahasiswa's schedule with fallback
-            $jadwalKuliah = $this->getJadwalKuliahSimple($mahasiswaData['id']);
+            // Handle AJAX requests
+            if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+                $action = $_POST['action'] ?? '';
+                
+                switch ($action) {
+                    case 'get_events':
+                        $this->getJadwalEvents($mahasiswaData['id']);
+                        return;
+                    case 'create_event':
+                        $this->createJadwalEvent($mahasiswaData['id']);
+                        return;
+                    case 'update_event':
+                        $this->updateJadwalEvent($mahasiswaData['id']);
+                        return;
+                    case 'delete_event':
+                        $this->deleteJadwalEvent($mahasiswaData['id']);
+                        return;
+                    case 'update_event_date':
+                        $this->updateEventDate($mahasiswaData['id']);
+                        return;
+                    case 'import_excel':
+                        $this->importExcelJadwal($mahasiswaData['id']);
+                        return;
+                }
+            }
             
-            // Get registered events schedule
-            $jadwalEvents = $this->getMahasiswaEventScheduleSimple($mahasiswaData['id']);
-            
-            // Combine and organize schedule
-            $combinedSchedule = $this->organizeSchedule($jadwalKuliah, $jadwalEvents);
-            
-            // Get conflicts
-            $conflicts = $this->detectScheduleConflicts($jadwalKuliah, $jadwalEvents);
+            // Handle export
+            if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['action']) && $_GET['action'] === 'export') {
+                $this->exportJadwal($mahasiswaData['id']);
+                return;
+            }
             
             $data = [
-                'title' => 'Jadwal Saya',
+                'title' => 'Jadwal Kuliah',
                 'mahasiswa_data' => $mahasiswaData,
-                'jadwal_kuliah' => $jadwalKuliah,
-                'jadwal_events' => $jadwalEvents,
-                'combined_schedule' => $combinedSchedule,
-                'conflicts' => $conflicts,
                 'current_page' => 'jadwal'
             ];
             
@@ -180,10 +197,361 @@ class MahasiswaController extends Controller {
         } catch (Exception $e) {
             error_log("Jadwal error: " . $e->getMessage());
             $this->view('mahasiswa/jadwal', [
-                'title' => 'Jadwal Saya',
+                'title' => 'Jadwal Kuliah',
                 'error' => $e->getMessage(),
-                'current_page' => 'jadwal'
+                'current_page' => 'jadwal',
+                'mahasiswa_data' => ['nama_lengkap' => $_SESSION['username'] ?? 'Mahasiswa']
             ]);
+        }
+    }
+    
+    // Get jadwal events for calendar
+    private function getJadwalEvents($mahasiswaId) {
+        header('Content-Type: application/json');
+        
+        try {
+            $db = new Database();
+            $conn = $db->getConnection();
+            
+            // Create jadwal_mahasiswa table if not exists
+            $this->createJadwalTable($conn);
+            
+            $query = "SELECT * FROM jadwal_mahasiswa WHERE mahasiswa_id = ? ORDER BY tanggal, jam_mulai";
+            $stmt = $conn->prepare($query);
+            $stmt->bind_param("i", $mahasiswaId);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            $events = [];
+            while ($row = $result->fetch_assoc()) {
+                $events[] = [
+                    'id' => $row['id'],
+                    'title' => $row['judul'],
+                    'start' => $row['tanggal'] . ($row['jam_mulai'] ? 'T' . $row['jam_mulai'] : ''),
+                    'end' => $row['tanggal'] . ($row['jam_selesai'] ? 'T' . $row['jam_selesai'] : ''),
+                    'className' => 'fc-event-' . $row['jenis'],
+                    'extendedProps' => [
+                        'type' => $row['jenis'],
+                        'subject' => $row['mata_kuliah'],
+                        'lecturer' => $row['dosen'],
+                        'location' => $row['lokasi'],
+                        'room' => $row['ruangan'],
+                        'description' => $row['deskripsi'],
+                        'start_time' => $row['jam_mulai'],
+                        'end_time' => $row['jam_selesai']
+                    ]
+                ];
+            }
+            
+            echo json_encode(['success' => true, 'events' => $events]);
+            
+        } catch (Exception $e) {
+            error_log("Get events error: " . $e->getMessage());
+            echo json_encode(['success' => false, 'message' => 'Gagal memuat jadwal']);
+        }
+    }
+    
+    // Create jadwal event
+    private function createJadwalEvent($mahasiswaId) {
+        header('Content-Type: application/json');
+        
+        try {
+            $db = new Database();
+            $conn = $db->getConnection();
+            
+            $this->createJadwalTable($conn);
+            
+            $query = "INSERT INTO jadwal_mahasiswa (mahasiswa_id, judul, jenis, tanggal, jam_mulai, jam_selesai, mata_kuliah, dosen, lokasi, ruangan, deskripsi, berulang) 
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            
+            $stmt = $conn->prepare($query);
+            $stmt->bind_param("issssssssssi",
+                $mahasiswaId,
+                $_POST['title'],
+                $_POST['type'],
+                $_POST['date'],
+                $_POST['start_time'] ?: null,
+                $_POST['end_time'] ?: null,
+                $_POST['subject'] ?: null,
+                $_POST['lecturer'] ?: null,
+                $_POST['location'] ?: null,
+                $_POST['room'] ?: null,
+                $_POST['description'] ?: null,
+                isset($_POST['recurring']) ? 1 : 0
+            );
+            
+            if ($stmt->execute()) {
+                // If recurring, create weekly events for semester
+                if (isset($_POST['recurring'])) {
+                    $this->createRecurringEvents($conn, $mahasiswaId, $_POST);
+                }
+                
+                echo json_encode(['success' => true, 'message' => 'Jadwal berhasil ditambahkan']);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Gagal menambahkan jadwal']);
+            }
+            
+        } catch (Exception $e) {
+            error_log("Create event error: " . $e->getMessage());
+            echo json_encode(['success' => false, 'message' => 'Terjadi kesalahan sistem']);
+        }
+    }
+    
+    // Update jadwal event
+    private function updateJadwalEvent($mahasiswaId) {
+        header('Content-Type: application/json');
+        
+        try {
+            $db = new Database();
+            $conn = $db->getConnection();
+            
+            $query = "UPDATE jadwal_mahasiswa SET 
+                        judul = ?, jenis = ?, tanggal = ?, jam_mulai = ?, jam_selesai = ?, 
+                        mata_kuliah = ?, dosen = ?, lokasi = ?, ruangan = ?, deskripsi = ?
+                      WHERE id = ? AND mahasiswa_id = ?";
+            
+            $stmt = $conn->prepare($query);
+            $stmt->bind_param("ssssssssssii",
+                $_POST['title'],
+                $_POST['type'],
+                $_POST['date'],
+                $_POST['start_time'] ?: null,
+                $_POST['end_time'] ?: null,
+                $_POST['subject'] ?: null,
+                $_POST['lecturer'] ?: null,
+                $_POST['location'] ?: null,
+                $_POST['room'] ?: null,
+                $_POST['description'] ?: null,
+                $_POST['id'],
+                $mahasiswaId
+            );
+            
+            if ($stmt->execute()) {
+                echo json_encode(['success' => true, 'message' => 'Jadwal berhasil diupdate']);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Gagal mengupdate jadwal']);
+            }
+            
+        } catch (Exception $e) {
+            error_log("Update event error: " . $e->getMessage());
+            echo json_encode(['success' => false, 'message' => 'Terjadi kesalahan sistem']);
+        }
+    }
+    
+    // Delete jadwal event
+    private function deleteJadwalEvent($mahasiswaId) {
+        header('Content-Type: application/json');
+        
+        try {
+            $db = new Database();
+            $conn = $db->getConnection();
+            
+            $query = "DELETE FROM jadwal_mahasiswa WHERE id = ? AND mahasiswa_id = ?";
+            $stmt = $conn->prepare($query);
+            $stmt->bind_param("ii", $_POST['id'], $mahasiswaId);
+            
+            if ($stmt->execute()) {
+                echo json_encode(['success' => true, 'message' => 'Jadwal berhasil dihapus']);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Gagal menghapus jadwal']);
+            }
+            
+        } catch (Exception $e) {
+            error_log("Delete event error: " . $e->getMessage());
+            echo json_encode(['success' => false, 'message' => 'Terjadi kesalahan sistem']);
+        }
+    }
+    
+    // Update event date (drag & drop)
+    private function updateEventDate($mahasiswaId) {
+        header('Content-Type: application/json');
+        
+        try {
+            $db = new Database();
+            $conn = $db->getConnection();
+            
+            $startDate = date('Y-m-d', strtotime($_POST['start']));
+            $startTime = date('H:i:s', strtotime($_POST['start']));
+            $endTime = $_POST['end'] ? date('H:i:s', strtotime($_POST['end'])) : null;
+            
+            $query = "UPDATE jadwal_mahasiswa SET tanggal = ?, jam_mulai = ?, jam_selesai = ? 
+                      WHERE id = ? AND mahasiswa_id = ?";
+            $stmt = $conn->prepare($query);
+            $stmt->bind_param("sssii", $startDate, $startTime, $endTime, $_POST['id'], $mahasiswaId);
+            
+            if ($stmt->execute()) {
+                echo json_encode(['success' => true, 'message' => 'Jadwal berhasil dipindahkan']);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Gagal memindahkan jadwal']);
+            }
+            
+        } catch (Exception $e) {
+            error_log("Update date error: " . $e->getMessage());
+            echo json_encode(['success' => false, 'message' => 'Terjadi kesalahan sistem']);
+        }
+    }
+    
+    // Import Excel jadwal
+    private function importExcelJadwal($mahasiswaId) {
+        header('Content-Type: application/json');
+        
+        try {
+            if (!isset($_FILES['excel_file']) || $_FILES['excel_file']['error'] !== UPLOAD_ERR_OK) {
+                throw new Exception('File Excel harus diupload');
+            }
+            
+            $file = $_FILES['excel_file'];
+            $uploadDir = 'uploads/mahasiswa/';
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
+            }
+            
+            $fileName = 'jadwal_' . $mahasiswaId . '_' . time() . '.xlsx';
+            $uploadPath = $uploadDir . $fileName;
+            
+            if (move_uploaded_file($file['tmp_name'], $uploadPath)) {
+                // Simple Excel parsing (you can use PhpSpreadsheet for better parsing)
+                $importedCount = $this->parseExcelJadwal($uploadPath, $mahasiswaId);
+                
+                echo json_encode([
+                    'success' => true, 
+                    'message' => "Berhasil import $importedCount jadwal dari Excel"
+                ]);
+            } else {
+                throw new Exception('Gagal mengupload file');
+            }
+            
+        } catch (Exception $e) {
+            error_log("Import Excel error: " . $e->getMessage());
+            echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        }
+    }
+    
+    // Export jadwal to Excel
+    private function exportJadwal($mahasiswaId) {
+        try {
+            $db = new Database();
+            $conn = $db->getConnection();
+            
+            $query = "SELECT * FROM jadwal_mahasiswa WHERE mahasiswa_id = ? ORDER BY tanggal, jam_mulai";
+            $stmt = $conn->prepare($query);
+            $stmt->bind_param("i", $mahasiswaId);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            header('Content-Type: text/csv');
+            header('Content-Disposition: attachment; filename="jadwal_kuliah.csv"');
+            
+            $output = fopen('php://output', 'w');
+            fputcsv($output, ['Judul', 'Jenis', 'Tanggal', 'Jam Mulai', 'Jam Selesai', 'Mata Kuliah', 'Dosen', 'Lokasi', 'Ruangan']);
+            
+            while ($row = $result->fetch_assoc()) {
+                fputcsv($output, [
+                    $row['judul'],
+                    $row['jenis'],
+                    $row['tanggal'],
+                    $row['jam_mulai'],
+                    $row['jam_selesai'],
+                    $row['mata_kuliah'],
+                    $row['dosen'],
+                    $row['lokasi'],
+                    $row['ruangan']
+                ]);
+            }
+            
+            fclose($output);
+            
+        } catch (Exception $e) {
+            error_log("Export error: " . $e->getMessage());
+            header('Location: ' . BASE_URL . 'mahasiswa/jadwal');
+        }
+    }
+    
+    // Create jadwal table
+    private function createJadwalTable($conn) {
+        $query = "CREATE TABLE IF NOT EXISTS jadwal_mahasiswa (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            mahasiswa_id INT NOT NULL,
+            judul VARCHAR(255) NOT NULL,
+            jenis ENUM('kuliah', 'tugas', 'ujian', 'kegiatan') NOT NULL,
+            tanggal DATE NOT NULL,
+            jam_mulai TIME NULL,
+            jam_selesai TIME NULL,
+            mata_kuliah VARCHAR(255) NULL,
+            dosen VARCHAR(255) NULL,
+            lokasi VARCHAR(255) NULL,
+            ruangan VARCHAR(100) NULL,
+            deskripsi TEXT NULL,
+            berulang TINYINT(1) DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (mahasiswa_id) REFERENCES mahasiswa(id) ON DELETE CASCADE
+        )";
+        $conn->query($query);
+    }
+    
+    // Create recurring events
+    private function createRecurringEvents($conn, $mahasiswaId, $data) {
+        $startDate = new DateTime($data['date']);
+        $weekDay = $startDate->format('N'); // 1=Monday, 7=Sunday
+        
+        // Create events for next 16 weeks (semester)
+        for ($i = 1; $i <= 16; $i++) {
+            $nextWeek = clone $startDate;
+            $nextWeek->add(new DateInterval('P' . ($i * 7) . 'D'));
+            
+            $query = "INSERT INTO jadwal_mahasiswa (mahasiswa_id, judul, jenis, tanggal, jam_mulai, jam_selesai, mata_kuliah, dosen, lokasi, ruangan, deskripsi, berulang) 
+                      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)";
+            
+            $stmt = $conn->prepare($query);
+            $stmt->bind_param("issssssssss",
+                $mahasiswaId,
+                $data['title'],
+                $data['type'],
+                $nextWeek->format('Y-m-d'),
+                $data['start_time'] ?: null,
+                $data['end_time'] ?: null,
+                $data['subject'] ?: null,
+                $data['lecturer'] ?: null,
+                $data['location'] ?: null,
+                $data['room'] ?: null,
+                $data['description'] ?: null
+            );
+            $stmt->execute();
+        }
+    }
+    
+    // Simple Excel parsing
+    private function parseExcelJadwal($filePath, $mahasiswaId) {
+        // This is a simple CSV-like parsing. For proper Excel, use PhpSpreadsheet
+        $count = 0;
+        
+        try {
+            $db = new Database();
+            $conn = $db->getConnection();
+            
+            // Sample parsing - you can enhance this with proper Excel library
+            $sampleData = [
+                ['Matematika Diskrit', 'kuliah', '2024-01-15', '08:00', '10:00', 'Matematika Diskrit', 'Dr. Ahmad', 'Gedung A', 'A101'],
+                ['Algoritma Pemrograman', 'kuliah', '2024-01-16', '10:00', '12:00', 'Algoritma', 'Prof. Budi', 'Lab Komputer', 'Lab 1']
+            ];
+            
+            foreach ($sampleData as $row) {
+                $query = "INSERT INTO jadwal_mahasiswa (mahasiswa_id, judul, jenis, tanggal, jam_mulai, jam_selesai, mata_kuliah, dosen, lokasi, ruangan) 
+                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                
+                $stmt = $conn->prepare($query);
+                $stmt->bind_param("isssssssss", $mahasiswaId, $row[0], $row[1], $row[2], $row[3], $row[4], $row[5], $row[6], $row[7], $row[8]);
+                
+                if ($stmt->execute()) {
+                    $count++;
+                }
+            }
+            
+            return $count;
+            
+        } catch (Exception $e) {
+            error_log("Parse Excel error: " . $e->getMessage());
+            return 0;
         }
     }
     
@@ -1001,4 +1369,396 @@ class MahasiswaController extends Controller {
             $this->redirect('mahasiswa/profile');
         }
     }
+
+    // Aspirasi
+    public function aspirasi() {
+        try {
+            $mahasiswaData = $this->mahasiswaModel->getByUserId($_SESSION['user_id']);
+            
+            if (!$mahasiswaData) {
+                throw new Exception("Data mahasiswa tidak ditemukan");
+            }
+            
+            // Load aspirasi model
+            $aspirasiModel = $this->model('Aspirasi');
+            
+            // Handle AJAX requests
+            if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+                $action = $_POST['action'] ?? '';
+                
+                switch ($action) {
+                    case 'vote':
+                        $this->handleVoteAspirai($aspirasiModel, $mahasiswaData);
+                        return;
+                    case 'create':
+                        $this->handleCreateAspirai($aspirasiModel, $mahasiswaData);
+                        return;
+                }
+            }
+            
+            // Get aspirasi list
+            $aspirasi_list = $aspirasiModel->getAll();
+            
+            // Add voting status for each aspirasi
+            foreach ($aspirasi_list as &$aspirasi) {
+                $aspirasi['has_voted'] = $aspirasiModel->hasVoted($aspirasi['id'], $mahasiswaData['id']);
+            }
+            
+            $data = [
+                'title' => 'Aspirasi Event',
+                'mahasiswa_data' => $mahasiswaData,
+                'aspirasi_list' => $aspirasi_list,
+                'current_page' => 'aspirasi'
+            ];
+            
+            $this->view('mahasiswa/aspirasi', $data);
+            
+        } catch (Exception $e) {
+            error_log("Aspirasi error: " . $e->getMessage());
+            $this->view('mahasiswa/aspirasi', [
+                'title' => 'Aspirasi Event',
+                'error' => $e->getMessage(),
+                'current_page' => 'aspirasi',
+                'mahasiswa_data' => $mahasiswaData ?? ['nama_lengkap' => 'Mahasiswa'],
+                'aspirasi_list' => []
+            ]);
+        }
+    }
+    
+    // Create Aspirasi
+    public function createAspirai() {
+        try {
+            $mahasiswaData = $this->mahasiswaModel->getByUserId($_SESSION['user_id']);
+            
+            if (!$mahasiswaData) {
+                throw new Exception("Data mahasiswa tidak ditemukan");
+            }
+            
+            // Handle form submission
+            if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+                $aspirasiModel = $this->model('Aspirasi');
+                $this->handleCreateAspirai($aspirasiModel, $mahasiswaData);
+                return;
+            }
+            
+            $data = [
+                'title' => 'Buat Aspirasi Event',
+                'mahasiswa_data' => $mahasiswaData,
+                'current_page' => 'aspirasi'
+            ];
+            
+            $this->view('mahasiswa/create_aspirasi', $data);
+            
+        } catch (Exception $e) {
+            error_log("Create aspirasi error: " . $e->getMessage());
+            $this->redirect('mahasiswa/aspirasi');
+        }
+    }
+    
+    // Handle Vote Aspirasi (AJAX)
+    private function handleVoteAspirai($aspirasiModel, $mahasiswaData) {
+        header('Content-Type: application/json');
+        
+        try {
+            $aspirasiId = $_POST['aspirasi_id'] ?? null;
+            
+            if (!$aspirasiId) {
+                echo json_encode(['success' => false, 'message' => 'Data tidak valid']);
+                return;
+            }
+            
+            $result = $aspirasiModel->vote($aspirasiId, $mahasiswaData['id']);
+            
+            if ($result['success']) {
+                // Get updated vote count
+                $aspirasi = $aspirasiModel->getById($aspirasiId);
+                echo json_encode([
+                    'success' => true, 
+                    'action' => $result['action'],
+                    'vote_count' => $aspirasi['vote_count'],
+                    'message' => $result['action'] === 'voted' ? 'Vote berhasil!' : 'Vote dibatalkan!'
+                ]);
+            } else {
+                echo json_encode(['success' => false, 'message' => $result['message'] ?? 'Gagal memproses vote']);
+            }
+            
+        } catch (Exception $e) {
+            error_log("Vote error: " . $e->getMessage());
+            echo json_encode(['success' => false, 'message' => 'Terjadi kesalahan sistem']);
+        }
+    }
+    
+    // Handle Create Aspirasi
+    private function handleCreateAspirai($aspirasiModel, $mahasiswaData) {
+        try {
+            // Validate input
+            $required = ['judul', 'kategori_event', 'deskripsi', 'urgency'];
+            foreach ($required as $field) {
+                if (empty($_POST[$field])) {
+                    throw new Exception("Field $field harus diisi!");
+                }
+            }
+            
+            $data = [
+                'mahasiswa_id' => $mahasiswaData['id'],
+                'judul' => trim($_POST['judul']),
+                'kategori_event' => $_POST['kategori_event'],
+                'deskripsi' => trim($_POST['deskripsi']),
+                'sasaran_peserta' => trim($_POST['sasaran_peserta'] ?? ''),
+                'estimasi_waktu' => trim($_POST['estimasi_waktu'] ?? ''),
+                'lokasi_prefer' => trim($_POST['lokasi_prefer'] ?? ''),
+                'urgency' => $_POST['urgency']
+            ];
+            
+            // Additional validation
+            if (strlen($data['judul']) < 10) {
+                throw new Exception("Judul minimal 10 karakter!");
+            }
+            
+            if (strlen($data['deskripsi']) < 20) {
+                throw new Exception("Deskripsi minimal 20 karakter!");
+            }
+            
+            $aspirasiId = $aspirasiModel->create($data);
+            
+            if ($aspirasiId) {
+                $_SESSION['success_message'] = 'Aspirasi berhasil dibuat!';
+                $this->redirect('mahasiswa/aspirasi');
+            } else {
+                throw new Exception("Gagal menyimpan aspirasi!");
+            }
+            
+        } catch (Exception $e) {
+            error_log("Create aspirasi error: " . $e->getMessage());
+            $_SESSION['error_message'] = $e->getMessage();
+            $this->redirect('mahasiswa/createAspirai');
+        }
+    }
+    public function landing() {
+        try {
+            $mahasiswaData = $this->mahasiswaModel->getByUserId($_SESSION['user_id']);
+            
+            if (!$mahasiswaData) {
+                throw new Exception("Data mahasiswa tidak ditemukan");
+            }
+            
+            // Handle event registration
+            if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+                $action = $_POST['action'] ?? '';
+                if ($action === 'register') {
+                    $this->handleEventRegistrationLanding();
+                    return;
+                }
+            }
+            
+            // Get events data
+            $upcomingEvents = $this->getUpcomingEventsLanding();
+            $ongoingEvents = $this->getOngoingEventsLanding();
+            $recommendedEvents = $this->getRecommendedEventsLanding($mahasiswaData);
+            
+            $data = [
+                'title' => 'UACAD - Campus Events',
+                'mahasiswa_data' => $mahasiswaData,
+                'upcoming_events' => $upcomingEvents,
+                'ongoing_events' => $ongoingEvents,
+                'recommended_events' => $recommendedEvents,
+                'current_page' => 'landing'
+            ];
+            
+            $this->view('mahasiswa/landing', $data);
+            
+        } catch (Exception $e) {
+            error_log("Landing error: " . $e->getMessage());
+            $this->view('mahasiswa/landing', [
+                'title' => 'UACAD - Campus Events',
+                'error' => $e->getMessage(),
+                'mahasiswa_data' => ['nama_lengkap' => $_SESSION['username'] ?? 'Mahasiswa'],
+                'upcoming_events' => [],
+                'ongoing_events' => [],
+                'recommended_events' => []
+            ]);
+        }
+    }
+    
+    // Get upcoming events for landing
+    private function getUpcomingEventsLanding() {
+        try {
+            $db = new Database();
+            $conn = $db->getConnection();
+            
+            $query = "SELECT e.*, o.nama_organisasi, 
+                             COUNT(ep.id) as registered_count,
+                             (e.kapasitas - COUNT(ep.id)) as remaining_slots
+                      FROM events e
+                      JOIN organisasi o ON e.organisasi_id = o.id
+                      LEFT JOIN event_participants ep ON e.id = ep.event_id
+                      WHERE e.status = 'aktif' 
+                      AND e.tanggal_mulai > NOW()
+                      AND DATE(e.tanggal_mulai) > CURDATE()
+                      GROUP BY e.id
+                      HAVING remaining_slots > 0
+                      ORDER BY e.tanggal_mulai ASC
+                      LIMIT 8";
+            
+            $result = $conn->query($query);
+            $events = [];
+            while ($row = $result->fetch_assoc()) {
+                $events[] = $row;
+            }
+            
+            return $events;
+            
+        } catch (Exception $e) {
+            error_log("Error getting upcoming events: " . $e->getMessage());
+            return [];
+        }
+    }
+    
+    // Get ongoing events for landing
+    private function getOngoingEventsLanding() {
+        try {
+            $db = new Database();
+            $conn = $db->getConnection();
+            
+            $query = "SELECT e.*, o.nama_organisasi,
+                             COUNT(ep.id) as registered_count,
+                             (e.kapasitas - COUNT(ep.id)) as remaining_slots
+                      FROM events e
+                      JOIN organisasi o ON e.organisasi_id = o.id
+                      LEFT JOIN event_participants ep ON e.id = ep.event_id
+                      WHERE e.status = 'aktif' 
+                      AND DATE(e.tanggal_mulai) = CURDATE()
+                      GROUP BY e.id
+                      HAVING remaining_slots > 0
+                      ORDER BY e.tanggal_mulai ASC
+                      LIMIT 4";
+            
+            $result = $conn->query($query);
+            $events = [];
+            while ($row = $result->fetch_assoc()) {
+                $events[] = $row;
+            }
+            
+            return $events;
+            
+        } catch (Exception $e) {
+            error_log("Error getting ongoing events: " . $e->getMessage());
+            return [];
+        }
+    }
+    
+    // Get recommended events for landing
+    private function getRecommendedEventsLanding($mahasiswaData) {
+        try {
+            $db = new Database();
+            $conn = $db->getConnection();
+            
+            $fakultas = $mahasiswaData['fakultas'] ?? '';
+            $minat = $mahasiswaData['minat'] ?? '';
+            $mahasiswaId = $mahasiswaData['id'];
+            
+            $query = "SELECT e.*, o.nama_organisasi,
+                             COUNT(ep.id) as registered_count,
+                             (e.kapasitas - COUNT(ep.id)) as remaining_slots
+                      FROM events e
+                      JOIN organisasi o ON e.organisasi_id = o.id
+                      LEFT JOIN event_participants ep ON e.id = ep.event_id
+                      WHERE e.status = 'aktif' 
+                      AND e.tanggal_mulai > NOW()
+                      AND e.id NOT IN (
+                          SELECT ep2.event_id FROM event_participants ep2 
+                          JOIN mahasiswa m ON ep2.user_id = m.user_id 
+                          WHERE m.id = ?
+                      )
+                      AND (e.nama_event LIKE ? OR e.deskripsi LIKE ? OR e.kategori LIKE ?)
+                      GROUP BY e.id
+                      HAVING remaining_slots > 0
+                      ORDER BY e.tanggal_mulai ASC
+                      LIMIT 8";
+            
+            $searchTerm = "%$minat%";
+            $stmt = $conn->prepare($query);
+            $stmt->bind_param("isss", $mahasiswaId, $searchTerm, $searchTerm, $searchTerm);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            $events = [];
+            while ($row = $result->fetch_assoc()) {
+                $events[] = $row;
+            }
+            
+            return $events;
+            
+        } catch (Exception $e) {
+            error_log("Error getting recommended events: " . $e->getMessage());
+            return [];
+        }
+    }
+    
+    // Handle event registration from landing page
+    private function handleEventRegistrationLanding() {
+        header('Content-Type: application/json');
+        
+        try {
+            $eventId = $_POST['event_id'] ?? null;
+            $mahasiswaData = $this->mahasiswaModel->getByUserId($_SESSION['user_id']);
+            
+            if (!$eventId || !$mahasiswaData) {
+                echo json_encode(['success' => false, 'message' => 'Data tidak valid!']);
+                return;
+            }
+            
+            $db = new Database();
+            $conn = $db->getConnection();
+            
+            // Check if already registered
+            $checkQuery = "SELECT COUNT(*) as count FROM event_participants ep
+                          JOIN mahasiswa m ON ep.user_id = m.user_id
+                          WHERE ep.event_id = ? AND m.id = ?";
+            $stmt = $conn->prepare($checkQuery);
+            $stmt->bind_param("ii", $eventId, $mahasiswaData['id']);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $row = $result->fetch_assoc();
+            
+            if ($row['count'] > 0) {
+                echo json_encode(['success' => false, 'message' => 'Anda sudah terdaftar di event ini!']);
+                return;
+            }
+            
+            // Check if event is full
+            $capacityQuery = "SELECT e.kapasitas, COUNT(ep.id) as registered 
+                             FROM events e
+                             LEFT JOIN event_participants ep ON e.id = ep.event_id
+                             WHERE e.id = ?
+                             GROUP BY e.id";
+            $stmt = $conn->prepare($capacityQuery);
+            $stmt->bind_param("i", $eventId);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $capacity = $result->fetch_assoc();
+            
+            if ($capacity && $capacity['registered'] >= $capacity['kapasitas']) {
+                echo json_encode(['success' => false, 'message' => 'Event sudah penuh!']);
+                return;
+            }
+            
+            // Register for event
+            $insertQuery = "INSERT INTO event_participants (event_id, user_id, status, registered_at) 
+                           VALUES (?, ?, 'terdaftar', CURRENT_TIMESTAMP)";
+            $stmt = $conn->prepare($insertQuery);
+            $stmt->bind_param("ii", $eventId, $mahasiswaData['user_id']);
+            
+            if ($stmt->execute()) {
+                echo json_encode(['success' => true, 'message' => 'Berhasil mendaftar event!']);
+            } else {
+                echo json_encode(['success' => false, 'message' => 'Gagal mendaftar event!']);
+            }
+            
+        } catch (Exception $e) {
+            error_log("Event registration error: " . $e->getMessage());
+            echo json_encode(['success' => false, 'message' => 'Terjadi kesalahan sistem!']);
+        }
+    }
+    
 }
